@@ -59,6 +59,7 @@ class MatchPrediction(Base):
     second_team_score = Column(Integer)
     match_id = Column(Integer, ForeignKey('match.id'))
     player_id = Column(Integer, ForeignKey('player.id'))
+    points = Column(Integer, nullable=True)
 
     match = relationship('Match', back_populates='match_predictions')
     player = relationship('Player', back_populates='match_predictions')
