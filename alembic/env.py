@@ -1,11 +1,17 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config, pool
 
 from alembic import context
-
-from db.models import Base, MatchPrediction, Match, User, Player, Tournament, TournamentPrediction  # Импортируйте вашу базу данных из вашего модуля
+from db.models import (
+    Base,  # Импортируйте вашу базу данных из вашего модуля
+    Match,
+    MatchPrediction,
+    Player,
+    Tournament,
+    TournamentPrediction,
+    User,
+)
 
 target_metadata = Base.metadata
 print(target_metadata.tables)
@@ -68,9 +74,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()
