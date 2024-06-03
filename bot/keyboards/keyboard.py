@@ -24,9 +24,15 @@ yes_no_keyboard.add(button_no)
 yes_no_keyboard = yes_no_keyboard.as_markup()
 
 def get_add_bot_keyboard(bot_username: str, tournament_id) -> InlineKeyboardMarkup:
+    admin_permissions = (
+        "change_info+post_messages+edit_messages+delete_messages+"
+        "restrict_members+invite_users+pin_messages+manage_topics+"
+        "promote_members+manage_video_chats+anonymous+manage_chat+"
+        "post_stories+edit_stories+delete_stories"
+    )
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Добавить меня в группу", url=f"https://t.me/{bot_username}?startgroup={tournament_id}")]
+            [InlineKeyboardButton(text="Добавить бота в группу", url=f"https://t.me/{bot_username}?startgroup={tournament_id}&admin={admin_permissions}")]
         ]
     )
 

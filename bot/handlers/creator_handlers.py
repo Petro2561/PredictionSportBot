@@ -1,13 +1,12 @@
 from aiogram import Router
 from aiogram.filters import CommandStart, StateFilter, CommandObject
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message, ChatMemberUpdated
+from aiogram.types import CallbackQuery, Message
 from bot.filters.filters import PrivateChatFilter
 from bot.keyboards.keyboard import get_add_bot_keyboard, tournament_keyboard, yes_no_keyboard, join_tournament_keyboard
-from bot.states.states import FSMFillParametres, InGroup
+from bot.states.states import FSMFillParametres
 from bot.utils.utils import create_player, create_tournament_db, create_user
 import logging
-import re
 
 START_PHRASE = "Этот бот для создания турниров прогнозов"
 START_TOURNAMENT_PHRASE = "Вы начали создание турнира."
@@ -18,6 +17,8 @@ ASK_WINNER = "Нужно ли угадывать победителя?"
 ASK_BEST_STRIKER = "Нужно ли угадывать лучшего бомбардира?"
 ASK_BEST_ASSISTANT = "Нужно ли угадывать лучшего ассистента?"
 TOURNAMENT_CREATED = "Турнир успешно создан! Информация:\n"
+JOIN_GROUP = "Вступить в турнир"
+ADDING_TO_TOURNAMENT = 'Вы успешно добавлены в турнир'
 
 router = Router()
 
@@ -29,7 +30,7 @@ async def handler(message: Message, command: CommandObject):
         "tournament_id": int(command.args)
     }
     await create_player(data_for_player)
-    await message.answer('Вы успешно добавлены в турнир')
+    await message.answer(ADDING_TO_TOURNAMENT)
 
 @router.message(CommandStart(), PrivateChatFilter())
 async def process_start_command(message: Message, state: FSMContext):
@@ -98,6 +99,6 @@ async def fill_best_assistant(callback_query: CallbackQuery, state: FSMContext):
 @router.message(CommandStart(deep_link=True))
 async def handler(message: Message, command: CommandObject):
     bot_username = (await message.bot.get_me()).username
-    await message.answer(f"Вступить в турнир", reply_markup=join_tournament_keyboard(bot_username, command.args))
+    join_message = await message.answer(JOIN_GROUP, reply_markup=join_tournament_keyboard(bot_username, command.args))
+    await message.bot.pin_chat_message(chat_id=message.chat.id, message_id=join_message.message_id)
     
-
