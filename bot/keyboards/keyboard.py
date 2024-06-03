@@ -1,8 +1,6 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from bot.config import Config, load_config
 
-config: Config = load_config()
 
 button_tournaments = InlineKeyboardButton(
     text="Мои турниры", callback_data="my_tournaments"
