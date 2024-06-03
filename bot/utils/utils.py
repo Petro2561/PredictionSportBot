@@ -1,5 +1,5 @@
 from db.crud.crud_base import CRUDBase
-from db.models import Tournament, User, Player
+from db.models import Tournament
 from db.db import get_async_session
 import logging
 from db.crud.player import crud_player

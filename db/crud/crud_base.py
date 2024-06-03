@@ -1,9 +1,5 @@
-from typing import Optional
-
-from sqlalchemy import asc, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from db.models import User
 
 
 class CRUDBase:
