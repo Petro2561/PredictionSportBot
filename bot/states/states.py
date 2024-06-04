@@ -1,4 +1,4 @@
-from aiogram.fsm.state import State, StatesGroup, default_state
+from aiogram.fsm.state import State, StatesGroup
 
 
 class FSMFillParametres(StatesGroup):
@@ -10,3 +10,4 @@ class FSMFillParametres(StatesGroup):
     fill_best_striker = State()
     fill_best_assistant = State()
     fill_confirm = State()
+    add_bot = State()

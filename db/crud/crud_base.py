@@ -1,9 +1,5 @@
-from typing import Optional
-
-from sqlalchemy import asc, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from db.models import User
 
 
 class CRUDBase:
@@ -17,12 +13,6 @@ class CRUDBase:
     ):
         db_obj = await session.execute(
             select(self.model).where(self.model.id == obj_id)
-        )
-        return db_obj.scalars().first()
-
-    async def get_by_telegram_id(self, telegram_id: int, session: AsyncSession):
-        db_obj = await session.execute(
-            select(self.model).where(self.model.telegram_id == telegram_id)
         )
         return db_obj.scalars().first()
 

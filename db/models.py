@@ -16,8 +16,8 @@ class Player(Base):
     __tablename__ = "player"
     id = Column(Integer, primary_key=True)
     points = Column(Integer, default=0)
-    group = Column(String)
-    tournament_id = Column(Integer, ForeignKey("tournament.id"))
+    group = Column(String, nullable=True)
+    tournament_id = Column(Integer, ForeignKey("tournament.id"), nullable=False)
     is_eliminated = Column(Boolean, default=False)
     user_id = Column(Integer, ForeignKey("user.id"), nullable=False)
 
