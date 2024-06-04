@@ -24,7 +24,7 @@ async def main():
     config: Config = load_config()
     bot = Bot(token=config.tg_bot.token)
 
-    await bot.delete_webhook(drop_pending_updates=False)
+    await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
 

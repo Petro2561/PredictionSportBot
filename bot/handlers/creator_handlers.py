@@ -19,6 +19,7 @@ ASK_BEST_ASSISTANT = "Нужно ли угадывать лучшего асси
 TOURNAMENT_CREATED = "Турнир успешно создан! Информация:\n"
 JOIN_GROUP = "Вступить в турнир"
 ADDING_TO_TOURNAMENT = 'Вы успешно добавлены в турнир'
+FILL_RESULTS_POINTS = 'Введите очки за правильно угаданный результат'
 
 router = Router()
 
@@ -49,18 +50,24 @@ async def create_tournament_handler(callback_query: CallbackQuery, state: FSMCon
 @router.message(StateFilter(FSMFillParametres.fill_name))
 async def fill_name(message: Message, state: FSMContext):
     await state.update_data(name=message.text)
-    await state.set_state(FSMFillParametres.fill_results_points)
+    await state.set_state(FSMFillParametres.fill_exact_score)
     await message.answer(FILL_POINTS)
 
-@router.message(StateFilter(FSMFillParametres.fill_results_points))
-async def fill_results_points(message: Message, state: FSMContext):
-    await state.update_data(results_points=int(message.text))
+@router.message(StateFilter(FSMFillParametres.fill_exact_score))
+async def fill_exact_points(message: Message, state: FSMContext):
+    await state.update_data(exact_score_points=message.text)
     await state.set_state(FSMFillParametres.fill_difference_points)
     await message.answer(FILL_DIFFERENCE_POINTS)
 
 @router.message(StateFilter(FSMFillParametres.fill_difference_points))
-async def fill_difference_points(message: Message, state: FSMContext):
+async def fill_results_points(message: Message, state: FSMContext):
     await state.update_data(difference_points=int(message.text))
+    await state.set_state(FSMFillParametres.fill_results_points)
+    await message.answer(FILL_RESULTS_POINTS)
+
+@router.message(StateFilter(FSMFillParametres.fill_results_points))
+async def fill_difference_points(message: Message, state: FSMContext):
+    await state.update_data(results_points=int(message.text))
     await state.set_state(FSMFillParametres.fill_winner)
     await message.answer(ASK_WINNER, reply_markup=yes_no_keyboard)
 
