@@ -32,7 +32,7 @@ async def create_user(callback_query):
 async def create_player(data):
     async for session in get_async_session():
         try:
-            existing_player = await crud_player.get_by_user_id(data['user_id'], session)
+            existing_player = await crud_player.get_by_user_id(data['user_id'], data['tournament_id'], session)
             if existing_player:
                 return existing_player
             player = await crud_player.create(data, session)
