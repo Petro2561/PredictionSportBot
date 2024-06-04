@@ -4,6 +4,7 @@ from aiogram.fsm.state import State, StatesGroup
 class FSMFillParametres(StatesGroup):
     fill_tournament = State()
     fill_name = State()
+    fill_exact_score = State()
     fill_difference_points = State()
     fill_results_points = State()
     fill_winner = State()

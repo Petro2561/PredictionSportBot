@@ -47,7 +47,8 @@ class Tournament(Base):
     __tablename__ = "tournament"
     id = Column(Integer, primary_key=True)
     name = Column(String)
-    results_points = Column(Integer)
+    exact_score_points = Column(Integer, nullable=True)
+    results_points = Column(Integer, nullable=True)
     difference_points = Column(Integer, nullable=True)
     competition_official_name = Column(String, nullable=True)
     winner = Column(Boolean, nullable=True)
