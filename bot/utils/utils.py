@@ -12,7 +12,7 @@ async def create_tournament_db(data):
         tournament = await tournament_crud.create(data, session)
         return tournament
     
-async def create_user(callback_query):
+async def get_or_create_user(callback_query):
     data = {
         'username': callback_query.from_user.username,
         'name': f'{callback_query.from_user.first_name} {callback_query.from_user.last_name}',
@@ -41,3 +41,4 @@ async def create_player(data):
             return player
         except Exception:
             logging.error('Не удалось добавить пользователя в базу', exc_info=True)
+

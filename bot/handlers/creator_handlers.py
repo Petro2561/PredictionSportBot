@@ -5,7 +5,7 @@ from aiogram.types import CallbackQuery, Message
 from bot.filters.filters import PrivateChatFilter
 from bot.keyboards.keyboard import get_add_bot_keyboard, tournament_keyboard, yes_no_keyboard, join_tournament_keyboard
 from bot.states.states import FSMFillParametres
-from bot.utils.utils import create_player, create_tournament_db, create_user
+from bot.utils.utils import create_player, create_tournament_db, get_or_create_user
 import logging
 
 START_PHRASE = "Этот бот для создания турниров прогнозов"
@@ -25,7 +25,7 @@ router = Router()
 
 @router.message(CommandStart(deep_link=True), PrivateChatFilter())
 async def handler(message: Message, command: CommandObject):
-    user = await create_user(message)
+    user = await get_or_create_user(message)
     data_for_player = {
         "user_id": user.id,
         "tournament_id": int(command.args)
@@ -35,13 +35,12 @@ async def handler(message: Message, command: CommandObject):
 
 @router.message(CommandStart(), PrivateChatFilter())
 async def process_start_command(message: Message, state: FSMContext):
-    await state.set_state(FSMFillParametres.fill_tournament)
     await message.answer(text=START_PHRASE, reply_markup=tournament_keyboard)
 
-@router.callback_query(lambda callback: callback.data == "create_tournament", StateFilter(FSMFillParametres.fill_tournament))
+@router.callback_query(lambda callback: callback.data == "create_tournament")
 async def create_tournament_handler(callback_query: CallbackQuery, state: FSMContext):
     await callback_query.message.delete()
-    user = await create_user(callback_query)
+    user = await get_or_create_user(callback_query)
     await state.update_data(user_id=int(user.id))
     await state.set_state(FSMFillParametres.fill_name)
     await callback_query.message.answer(START_TOURNAMENT_PHRASE)
