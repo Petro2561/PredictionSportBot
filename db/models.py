@@ -82,8 +82,9 @@ class Tournament(Base):
     current_tour = relationship("Tour", foreign_keys=[current_tour_id], post_update=True)
 
 class Tour(Base):
+    __tablename__ = "tour"
     id = Column(Integer, primary_key=True)
-    number = Column(Integer, null=False)
+    number = Column(Integer, nullable=False)
     tournament_id = (Column, ForeignKey("tournament.id"))
     next_deadline = Column(DateTime, nullable=False)
     end_of_next_tour = Column(DateTime, nullable=False)
