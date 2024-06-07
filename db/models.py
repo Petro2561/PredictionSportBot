@@ -70,6 +70,7 @@ class Tournament(Base):
     best_assistant = Column(Boolean, nullable=True)
     user_id = Column(Integer, ForeignKey("user.id"), nullable=False)
     telegram_group_id = Column(Integer, nullable=True)
+    current_tour_id = Column(Integer, ForeignKey("tour.id"), nullable=True)
 
     user = relationship("User", back_populates="tournaments")
     tournament_predictions = relationship(
@@ -77,6 +78,17 @@ class Tournament(Base):
     )
     players = relationship("Player", back_populates="tournament")
     grouphistory = relationship("GroupHistory", back_populates="tournament")
+    tours = relationship("Tour", back_populates="tournament")
+    current_tour = relationship("Tour", foreign_keys=[current_tour_id], post_update=True)
+
+class Tour(Base):
+    id = Column(Integer, primary_key=True)
+    number = Column(Integer, null=False)
+    tournament_id = (Column, ForeignKey("tournament.id"))
+    next_deadline = Column(DateTime, nullable=False)
+    end_of_next_tour = Column(DateTime, nullable=False)
+
+    tournament = relationship("Tournament", back_populates="tours")
 
 
 class Match(Base):

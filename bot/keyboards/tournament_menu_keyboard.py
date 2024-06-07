@@ -32,8 +32,9 @@ def keyboard_menu(user, tournament):
     if user.id == tournament.user.id:
         button_set_null = KeyboardButton(text="Обнулить очки игрокам")
         button_set_matches = KeyboardButton(text="Установить матчи")
+        button_set_matches_result = KeyboardButton(text="Проставить результаты матчей")
         button_make_groups = KeyboardButton(text="Провести жеребьевку")
         kb_builder.row(button_set_null, button_set_matches, width=2)
-        kb_builder.row(button_make_groups, width=2)
+        kb_builder.row(button_make_groups, button_set_matches_result, width=2)
     keyboard = kb_builder.as_markup(resize_keyboard=True, one_time_keyboard=True)
     return keyboard
