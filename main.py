@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot.config import Config, load_config
-from bot.handlers import creator_handlers
+from bot.handlers import creator_handlers, tournament_menu
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +21,7 @@ async def main():
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
     dp.include_router(creator_handlers.router)
+    dp.include_router(tournament_menu.router)
     config: Config = load_config()
     bot = Bot(token=config.tg_bot.token)
 

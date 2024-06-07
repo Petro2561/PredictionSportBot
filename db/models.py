@@ -26,6 +26,7 @@ class Player(Base):
     tournament_predictions = relationship(
         "TournamentPrediction", back_populates="player"
     )
+    tournament = relationship("Tournament", back_populates="players")
 
     __table_args__ = (
         UniqueConstraint("user_id", "tournament_id", name="_user_tournament_uc"),
@@ -62,6 +63,7 @@ class Tournament(Base):
     tournament_predictions = relationship(
         "TournamentPrediction", back_populates="tournament"
     )
+    players = relationship("Player", back_populates="tournament")
 
 
 class Match(Base):

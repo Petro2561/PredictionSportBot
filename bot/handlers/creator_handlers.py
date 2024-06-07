@@ -5,7 +5,7 @@ from aiogram.types import CallbackQuery, Message
 from bot.filters.filters import PrivateChatFilter
 from bot.keyboards.keyboard import get_add_bot_keyboard, tournament_keyboard, yes_no_keyboard, join_tournament_keyboard
 from bot.states.states import FSMFillParametres
-from bot.utils.utils import create_player, create_tournament_db, create_user
+from bot.utils.utils import create_player, create_tournament_db, get_or_create_user
 import logging
 
 START_PHRASE = "Этот бот для создания турниров прогнозов"
@@ -13,7 +13,7 @@ START_TOURNAMENT_PHRASE = "Вы начали создание турнира."
 FILL_TOURNAMENT_NAME = "Введите название турнира"
 FILL_POINTS = "Введите очки за точно угаданный счет:"
 FILL_DIFFERENCE_POINTS = "Введите очки за угаданную разницу голов, например, если прогноз был 2-0, а игрок написал 3-1, то он верно угадал разницу голов:"
-ASK_WINNER = "Нужно ли угадывать победителя?"
+ASK_WINNER = "Нужно ли угадывать команду победителя турнира?"
 ASK_BEST_STRIKER = "Нужно ли угадывать лучшего бомбардира?"
 ASK_BEST_ASSISTANT = "Нужно ли угадывать лучшего ассистента?"
 TOURNAMENT_CREATED = "Турнир успешно создан! Информация:\n"
@@ -25,7 +25,7 @@ router = Router()
 
 @router.message(CommandStart(deep_link=True), PrivateChatFilter())
 async def handler(message: Message, command: CommandObject):
-    user = await create_user(message)
+    user = await get_or_create_user(message)
     data_for_player = {
         "user_id": user.id,
         "tournament_id": int(command.args)
@@ -35,13 +35,12 @@ async def handler(message: Message, command: CommandObject):
 
 @router.message(CommandStart(), PrivateChatFilter())
 async def process_start_command(message: Message, state: FSMContext):
-    await state.set_state(FSMFillParametres.fill_tournament)
     await message.answer(text=START_PHRASE, reply_markup=tournament_keyboard)
 
-@router.callback_query(lambda callback: callback.data == "create_tournament", StateFilter(FSMFillParametres.fill_tournament))
+@router.callback_query(lambda callback: callback.data == "create_tournament")
 async def create_tournament_handler(callback_query: CallbackQuery, state: FSMContext):
     await callback_query.message.delete()
-    user = await create_user(callback_query)
+    user = await get_or_create_user(callback_query)
     await state.update_data(user_id=int(user.id))
     await state.set_state(FSMFillParametres.fill_name)
     await callback_query.message.answer(START_TOURNAMENT_PHRASE)
