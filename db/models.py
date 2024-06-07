@@ -1,4 +1,7 @@
+from datetime import datetime
+
 from sqlalchemy import (
+    JSON,
     Boolean,
     Column,
     DateTime,
@@ -33,6 +36,16 @@ class Player(Base):
     )
 
 
+class GroupHistory(Base):
+    __tablename__ = "group_history"
+    id = Column(Integer, primary_key=True)
+    group_distribution = Column(JSON, nullable=False, default=list)
+    timestamp = Column(DateTime, default=datetime.now(), nullable=False)
+    tournament_id = Column(Integer, ForeignKey("tournament.id"), nullable=False)
+
+    tournament = relationship("Tournament", back_populates="grouphistory")
+
+
 class User(Base):
     __tablename__ = "user"
     id = Column(Integer, primary_key=True)
@@ -55,15 +68,15 @@ class Tournament(Base):
     winner = Column(Boolean, nullable=True)
     best_striker = Column(Boolean, nullable=True)
     best_assistant = Column(Boolean, nullable=True)
-    next_deadline = Column(DateTime, nullable=True)
-    end_of_next_tour = Column(DateTime, nullable=True)
     user_id = Column(Integer, ForeignKey("user.id"), nullable=False)
+    telegram_group_id = Column(Integer, nullable=True)
 
     user = relationship("User", back_populates="tournaments")
     tournament_predictions = relationship(
         "TournamentPrediction", back_populates="tournament"
     )
     players = relationship("Player", back_populates="tournament")
+    grouphistory = relationship("GroupHistory", back_populates="tournament")
 
 
 class Match(Base):

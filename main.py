@@ -1,9 +1,10 @@
 import asyncio
 import logging
 
-from aiogram import Bot, Dispatcher
+from aiogram import Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
+from bot.bot import main_bot
 from bot.config import Config, load_config
 from bot.handlers import creator_handlers, tournament_menu
 
@@ -22,11 +23,9 @@ async def main():
     dp = Dispatcher(storage=storage)
     dp.include_router(creator_handlers.router)
     dp.include_router(tournament_menu.router)
-    config: Config = load_config()
-    bot = Bot(token=config.tg_bot.token)
 
-    await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+    await main_bot.delete_webhook(drop_pending_updates=False)
+    await dp.start_polling(main_bot)
 
 
 asyncio.run(main())

@@ -13,6 +13,7 @@ class FSMFillParametres(StatesGroup):
     fill_confirm = State()
     add_bot = State()
 
+
 class TournamentMenu(StatesGroup):
-    first_step = State()
     tournament_menu = State()
+    groups = State()

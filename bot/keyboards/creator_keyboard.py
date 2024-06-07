@@ -1,7 +1,6 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-
 button_tournaments = InlineKeyboardButton(
     text="Мои турниры", callback_data="my_tournaments"
 )
@@ -21,6 +20,7 @@ yes_no_keyboard.add(button_yes)
 yes_no_keyboard.add(button_no)
 yes_no_keyboard = yes_no_keyboard.as_markup()
 
+
 def get_add_bot_keyboard(bot_username: str, tournament_id) -> InlineKeyboardMarkup:
     admin_permissions = (
         "change_info+post_messages+edit_messages+delete_messages+"
@@ -30,13 +30,24 @@ def get_add_bot_keyboard(bot_username: str, tournament_id) -> InlineKeyboardMark
     )
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Добавить бота в группу", url=f"https://t.me/{bot_username}?startgroup={tournament_id}&admin={admin_permissions}")]
+            [
+                InlineKeyboardButton(
+                    text="Добавить бота в группу",
+                    url=f"https://t.me/{bot_username}?startgroup&admin={admin_permissions}",
+                )
+            ]
         ]
     )
+
 
 def join_tournament_keyboard(bot_username, tournament_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Вступить в турнир", url=f"https://t.me/{bot_username}?start={tournament_id}")]
+            [
+                InlineKeyboardButton(
+                    text="Вступить в турнир",
+                    url=f"https://t.me/{bot_username}?start={tournament_id}",
+                )
+            ]
         ]
     )
