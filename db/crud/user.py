@@ -11,5 +11,6 @@ class CRUDuser(CRUDBase):
             select(self.model).where(self.model.telegram_id == telegram_id)
         )
         return db_obj.scalars().first()
-    
+
+
 crud_user = CRUDuser(User)
