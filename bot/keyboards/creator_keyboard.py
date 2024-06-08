@@ -33,7 +33,7 @@ def get_add_bot_keyboard(bot_username: str, tournament_id) -> InlineKeyboardMark
             [
                 InlineKeyboardButton(
                     text="Добавить бота в группу",
-                    url=f"https://t.me/{bot_username}?startgroup&admin={admin_permissions}",
+                    url=f"https://t.me/{bot_username}?startgroup={tournament_id}&admin={admin_permissions}",
                 )
             ]
         ]
