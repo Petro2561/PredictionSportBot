@@ -34,7 +34,8 @@ def keyboard_menu(user, tournament):
         button_set_matches = KeyboardButton(text="Установить матчи")
         button_set_matches_result = KeyboardButton(text="Проставить результаты матчей")
         button_make_groups = KeyboardButton(text="Провести жеребьевку")
+        button_eliminate_plaayer = KeyboardButton(text="Убрать игрока из турнира")
         kb_builder.row(button_set_null, button_set_matches, width=2)
-        kb_builder.row(button_make_groups, button_set_matches_result, width=2)
+        kb_builder.row(button_make_groups, button_set_matches_result, button_eliminate_plaayer, width=2)
     keyboard = kb_builder.as_markup(resize_keyboard=True, one_time_keyboard=True)
     return keyboard

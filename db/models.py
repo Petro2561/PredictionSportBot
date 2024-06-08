@@ -80,6 +80,8 @@ class Tournament(Base):
     grouphistory = relationship("GroupHistory", back_populates="tournament")
     tours = relationship("Tour", back_populates="tournament")
     current_tour = relationship("Tour", foreign_keys=[current_tour_id], post_update=True)
+    matches = relationship("Match", back_populates="tournament")
+    resetpoints = relationship("ResetPoints", back_populates="tournament")
 
 class Tour(Base):
     __tablename__ = "tour"
@@ -100,6 +102,8 @@ class Match(Base):
     first_team = Column(String, nullable=False)
     second_team = Column(String, nullable=False)
     tour = Column(Integer, nullable=False)
+    tournament_id = (Column, ForeignKey("tournament.id"))
+    tournament = relationship("Tournament", back_populates="matches")
 
     match_predictions = relationship("MatchPrediction", back_populates="match")
 
@@ -136,3 +140,11 @@ class TournamentPrediction(Base):
     __table_args__ = (
         UniqueConstraint("tournament_id", "player_id", name="_tournament_player_uc"),
     )
+
+class ResetPoints(Base):
+    __tablename__ = "reset_points"
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime, default=datetime.now(), nullable=False)
+    tournament_id = Column(Integer, ForeignKey("tournament.id"), nullable=False)
+
+    tournament = relationship("Tournament", back_populates="resetpoints")
