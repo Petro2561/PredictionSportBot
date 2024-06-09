@@ -11,7 +11,8 @@ from bot.keyboards.tournament_menu_keyboard import (
     keyboard_menu,
 )
 from bot.states.states import TournamentMenu
-from bot.utils.random_distribution import random_distribution
+from bot.utils.points_results import get_prediction_results
+from bot.utils.random_distribution import random_distribution, show_distribution
 from bot.utils.utils_tournament import (
     eleminated_to_front,
     get_all_tournaments,
@@ -88,7 +89,7 @@ async def get_users(message: Message, state: FSMContext):
     IsTournamentOwner(),
     StateFilter(TournamentMenu.tournament_menu),
 )
-async def get_users(message: Message, state: FSMContext):
+async def get_group_number(message: Message, state: FSMContext):
     data = await state.get_data()
     players = data["tournament"].players
     await message.answer(f"В турнире {len(players)} участников")
@@ -97,7 +98,7 @@ async def get_users(message: Message, state: FSMContext):
 
 
 @router.message(IsTournamentOwner(), StateFilter(TournamentMenu.groups))
-async def get_users(message: Message, state: FSMContext):
+async def get_random_distribution(message: Message, state: FSMContext):
     data = await state.get_data()
     tournament: Tournament = data["tournament"]
     number_of_groups = int(message.text)
@@ -106,3 +107,27 @@ async def get_users(message: Message, state: FSMContext):
     # В идеале сразу отправлять в группу сообщения
     await message.answer(result)
     await state.clear()
+
+@router.message(
+    lambda message: message.text == "Посмотреть таблицу",
+    StateFilter(TournamentMenu.tournament_menu),
+)
+async def get_results(message: Message, state: FSMContext):
+    data = await state.get_data()
+    players = data["tournament"].players
+    await get_prediction_results(data["tournament"])
+
+
+@router.message(
+    lambda message: message.text == "Установить мачти",
+    StateFilter(TournamentMenu.tournament_menu),
+)
+async def set_matches(message: Message, state: FSMContext):
+    ### Вот здесь хэндлер для webapp
+
+
+
+
+        
+
+    

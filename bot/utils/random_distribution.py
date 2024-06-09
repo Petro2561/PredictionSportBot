@@ -27,7 +27,7 @@ async def show_distribution(groups: List[list]):
     for idx, group in enumerate(groups):
         result_message += f"\nГруппа {idx + 1}:\n"
         for player in group:
-            result_message += f"{player.user.name} (@{player.user.username})\n"
+            result_message += f"{player.user.name} (@{player.user.username} {player.points})\n"
     return result_message
 
 

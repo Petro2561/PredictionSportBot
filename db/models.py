@@ -102,9 +102,9 @@ class Match(Base):
     first_team = Column(String, nullable=False)
     second_team = Column(String, nullable=False)
     tour = Column(Integer, nullable=False)
-    tournament_id = (Column, ForeignKey("tournament.id"))
-    tournament = relationship("Tournament", back_populates="matches")
+    tournament_id = Column(Integer, ForeignKey("tournament.id"))
 
+    tournament = relationship("Tournament", back_populates="matches")
     match_predictions = relationship("MatchPrediction", back_populates="match")
 
 
