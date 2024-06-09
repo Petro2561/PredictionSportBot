@@ -124,7 +124,7 @@ async def get_results(message: Message, state: FSMContext):
 )
 async def set_matches(message: Message, state: FSMContext):
     ### Вот здесь хэндлер для webapp
-
+    pass
 
 
 
