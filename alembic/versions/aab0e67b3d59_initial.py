@@ -1,8 +1,8 @@
-"""Added fields
+"""Initial
 
-Revision ID: 9eda00fa357a
+Revision ID: aab0e67b3d59
 Revises: 
-Create Date: 2024-06-09 12:04:45.906559
+Create Date: 2024-06-10 16:50:24.764788
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '9eda00fa357a'
+revision: str = 'aab0e67b3d59'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -23,18 +23,12 @@ def upgrade() -> None:
     op.create_table('tour',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('number', sa.Integer(), nullable=False),
+    sa.Column('tournament_id', sa.Integer(), nullable=True),
     sa.Column('next_deadline', sa.DateTime(), nullable=False),
     sa.Column('end_of_next_tour', sa.DateTime(), nullable=False),
+    sa.Column('is_calculated', sa.Boolean(), nullable=True),
+    sa.ForeignKeyConstraint(['tournament_id'], ['tournament.id'], ),
     sa.PrimaryKeyConstraint('id')
-    )
-    op.create_table('user',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('username', sa.String(), nullable=True),
-    sa.Column('name', sa.String(), nullable=True),
-    sa.Column('telegram_id', sa.Integer(), nullable=True),
-    sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('telegram_id'),
-    sa.UniqueConstraint('username')
     )
     op.create_table('tournament',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -52,6 +46,15 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['current_tour_id'], ['tour.id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
     sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('user',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('username', sa.String(), nullable=True),
+    sa.Column('name', sa.String(), nullable=True),
+    sa.Column('telegram_id', sa.Integer(), nullable=True),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('telegram_id'),
+    sa.UniqueConstraint('username')
     )
     op.create_table('group_history',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -88,6 +91,8 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('timestamp', sa.DateTime(), nullable=False),
     sa.Column('tournament_id', sa.Integer(), nullable=False),
+    sa.Column('tour_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['tour_id'], ['tour.id'], ),
     sa.ForeignKeyConstraint(['tournament_id'], ['tournament.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -126,7 +131,7 @@ def downgrade() -> None:
     op.drop_table('player')
     op.drop_table('match')
     op.drop_table('group_history')
-    op.drop_table('tournament')
     op.drop_table('user')
+    op.drop_table('tournament')
     op.drop_table('tour')
     # ### end Alembic commands ###

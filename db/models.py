@@ -1,5 +1,4 @@
 from datetime import datetime
-
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -11,9 +10,9 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
+from sqlalchemy.ext.declarative import declarative_base
 
-from db.db import Base
-
+Base = declarative_base()
 
 class Player(Base):
     __tablename__ = "player"
@@ -26,15 +25,12 @@ class Player(Base):
 
     user = relationship("User", back_populates="players")
     match_predictions = relationship("MatchPrediction", back_populates="player")
-    tournament_predictions = relationship(
-        "TournamentPrediction", back_populates="player"
-    )
+    tournament_predictions = relationship("TournamentPrediction", back_populates="player")
     tournament = relationship("Tournament", back_populates="players")
 
     __table_args__ = (
         UniqueConstraint("user_id", "tournament_id", name="_user_tournament_uc"),
     )
-
 
 class GroupHistory(Base):
     __tablename__ = "group_history"
@@ -45,7 +41,6 @@ class GroupHistory(Base):
 
     tournament = relationship("Tournament", back_populates="grouphistory")
 
-
 class User(Base):
     __tablename__ = "user"
     id = Column(Integer, primary_key=True)
@@ -55,7 +50,6 @@ class User(Base):
 
     players = relationship("Player", back_populates="user")
     tournaments = relationship("Tournament", back_populates="user")
-
 
 class Tournament(Base):
     __tablename__ = "tournament"
@@ -73,12 +67,10 @@ class Tournament(Base):
     current_tour_id = Column(Integer, ForeignKey("tour.id"), nullable=True)
 
     user = relationship("User", back_populates="tournaments")
-    tournament_predictions = relationship(
-        "TournamentPrediction", back_populates="tournament"
-    )
+    tournament_predictions = relationship("TournamentPrediction", back_populates="tournament")
     players = relationship("Player", back_populates="tournament")
     grouphistory = relationship("GroupHistory", back_populates="tournament")
-    tours = relationship("Tour", back_populates="tournament")
+    tours = relationship("Tour", back_populates="tournament", foreign_keys="[Tour.tournament_id]")
     current_tour = relationship("Tour", foreign_keys=[current_tour_id], post_update=True)
     matches = relationship("Match", back_populates="tournament")
     resetpoints = relationship("ResetPoints", back_populates="tournament")
@@ -87,11 +79,13 @@ class Tour(Base):
     __tablename__ = "tour"
     id = Column(Integer, primary_key=True)
     number = Column(Integer, nullable=False)
-    tournament_id = (Column, ForeignKey("tournament.id"))
+    tournament_id = Column(Integer, ForeignKey("tournament.id"))
     next_deadline = Column(DateTime, nullable=False)
     end_of_next_tour = Column(DateTime, nullable=False)
+    is_calculated = Column(Boolean, default=False)
 
-    tournament = relationship("Tournament", back_populates="tours")
+    tournament = relationship("Tournament", back_populates="tours", foreign_keys=[tournament_id])
+    resetpoints = relationship("ResetPoints", back_populates="tour", foreign_keys="[ResetPoints.tour_id]")
 
 
 class Match(Base):
@@ -107,7 +101,6 @@ class Match(Base):
     tournament = relationship("Tournament", back_populates="matches")
     match_predictions = relationship("MatchPrediction", back_populates="match")
 
-
 class MatchPrediction(Base):
     __tablename__ = "match_prediction"
     id = Column(Integer, primary_key=True)
@@ -115,7 +108,7 @@ class MatchPrediction(Base):
     second_team_score = Column(Integer, nullable=False)
     match_id = Column(Integer, ForeignKey("match.id"), nullable=False)
     player_id = Column(Integer, ForeignKey("player.id"), nullable=False)
-    points = Column(Integer, nullable=True)
+    points = Column(Integer, default=0)
 
     match = relationship("Match", back_populates="match_predictions")
     player = relationship("Player", back_populates="match_predictions")
@@ -123,7 +116,6 @@ class MatchPrediction(Base):
     __table_args__ = (
         UniqueConstraint("match_id", "player_id", name="_match_player_uc"),
     )
-
 
 class TournamentPrediction(Base):
     __tablename__ = "tournament_prediction"
@@ -146,5 +138,8 @@ class ResetPoints(Base):
     id = Column(Integer, primary_key=True)
     timestamp = Column(DateTime, default=datetime.now(), nullable=False)
     tournament_id = Column(Integer, ForeignKey("tournament.id"), nullable=False)
+    tour_id = Column(Integer, ForeignKey("tour.id"), nullable=False)
 
-    tournament = relationship("Tournament", back_populates="resetpoints")
+    tournament = relationship("Tournament", back_populates="resetpoints", foreign_keys=[tournament_id])
+    tour = relationship("Tour", back_populates="resetpoints", foreign_keys=[tour_id])
+

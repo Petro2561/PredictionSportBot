@@ -16,6 +16,7 @@ async def get_tournament(id: int) -> Tournament:
         tournament = await crud_tournament.get(id, session)
         await session.refresh(tournament, ["user"])
         await session.refresh(tournament, ["players"])
+        await session.refresh(tournament, ["current_tour_id"])
         for player in tournament.players:
             await session.refresh(player, ["user"])
         return tournament

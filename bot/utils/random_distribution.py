@@ -1,10 +1,10 @@
 import logging
 import random
-from typing import List
+from typing import Dict, List
 
 from db.crud import crud_group_history
 from db.db import get_async_session
-from db.models import GroupHistory, Tournament
+from db.models import GroupHistory, Player, Tournament
 
 
 async def random_distribution(tournament: Tournament, number_of_groups: int):
@@ -16,18 +16,24 @@ async def random_distribution(tournament: Tournament, number_of_groups: int):
             groups[i % number_of_groups].append(player)
         group_history = await create_group_history(groups, tournament)
         await set_player_groups(group_history=group_history, tournament=tournament)
-        resuls = await show_distribution(groups)
+        resuls = await show_distribution(group_history.group_distribution, players)
         return resuls
     except Exception:
         logging.error("Что-то пошло нет так при жеребьевке", exc_info=True)
 
 
-async def show_distribution(groups: List[list]):
+
+async def show_distribution(group_distribution: Dict[str, List[int]], players: List[Player]):
     result_message = "Распределение по группам:\n"
-    for idx, group in enumerate(groups):
-        result_message += f"\nГруппа {idx + 1}:\n"
-        for player in group:
-            result_message += f"{player.user.name} (@{player.user.username} {player.points})\n"
+    player_dict = {player.id: player for player in players}
+    
+    for group_name, player_ids in group_distribution.items():
+        result_message += f"\n{group_name}:\n"
+        for player_id in player_ids:
+            player = player_dict.get(player_id)
+            if player:
+                result_message += f"{player.user.name} (@{player.user.username} {player.points})\n"
+    
     return result_message
 
 
@@ -54,3 +60,8 @@ async def set_player_groups(group_history: GroupHistory, tournament: Tournament)
                     player.group = group_name
                     session.add(player)
         await session.commit()
+
+async def get_group_history(tournament):
+    async for session in get_async_session():
+        group_history = await crud_group_history.get_last_group_history(tournament.id, session)
+        return group_history
