@@ -1,9 +1,17 @@
 from db.crud.crud_base import CRUDBase
 from db.models import GroupHistory
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 
 class CRUDGroupHistory(CRUDBase):
-    pass
+    async def get_last_group_history(self, tournament_id: int, session: AsyncSession):
+        db_obj = await session.execute(
+            select(self.model)
+            .where(self.model.tournament_id == tournament_id)
+            .order_by(self.model.timestamp.desc())
+        )
+        return db_obj.scalars().first()
 
 
 crud_group_history = CRUDGroupHistory(GroupHistory)

@@ -11,8 +11,8 @@ from bot.keyboards.tournament_menu_keyboard import (
     keyboard_menu,
 )
 from bot.states.states import TournamentMenu
-from bot.utils.points_results import get_prediction_results
-from bot.utils.random_distribution import random_distribution, show_distribution
+from bot.utils.points_results import calculate_prediction_results, player_points_calculation
+from bot.utils.random_distribution import get_group_history, random_distribution, show_distribution
 from bot.utils.utils_tournament import (
     eleminated_to_front,
     get_all_tournaments,
@@ -20,6 +20,7 @@ from bot.utils.utils_tournament import (
 )
 from bot.utils.utils_user_player import get_or_create_user
 from db.models import Tournament, User
+from db.crud.group_history import crud_group_history
 
 router = Router()
 
@@ -114,8 +115,19 @@ async def get_random_distribution(message: Message, state: FSMContext):
 )
 async def get_results(message: Message, state: FSMContext):
     data = await state.get_data()
-    players = data["tournament"].players
-    await get_prediction_results(data["tournament"])
+    tournament: Tournament = data["tournament"]
+    result = await calculate_prediction_results(tournament)
+    if result:
+        await player_points_calculation(tournament)
+        groups = await get_group_history(tournament)
+        if groups:
+            tournament = await get_tournament(tournament.id)
+            results = await show_distribution(groups.group_distribution, tournament.players)
+            await message.answer(results)
+        else:
+            await message.answer('Пока нет групп!')
+    else:
+        await message.answer('Пока турнир не начался')
 
 
 @router.message(
