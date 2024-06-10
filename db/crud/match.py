@@ -6,9 +6,9 @@ from sqlalchemy.orm import joinedload
 
 
 class CRUDMatch(CRUDBase):
-    async def get_matches_by_tour(self, current_tour: int, session: AsyncSession):
+    async def get_matches_by_tour(self, current_tour: int, tournament_id: int, session: AsyncSession):
         db_obj = await session.execute(
-            select(self.model).where(self.model.tour == current_tour).options(joinedload(self.model.match_predictions))
+            select(self.model).where(self.model.tour == current_tour, self.model.tournament_id == tournament_id).options(joinedload(self.model.match_predictions))
         )
         return db_obj.unique().scalars().all()
 

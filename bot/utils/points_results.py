@@ -10,7 +10,7 @@ async def calculate_prediction_results(tournament: Tournament):
     async for session in get_async_session():
         tour = await crud_tour.get_tour_by_id(tournament.current_tour_id, session)
         if tour:
-            matches = await crud_match.get_matches_by_tour(tour.number, session)
+            matches = await crud_match.get_matches_by_tour(current_tour=tour.number, tournament_id=tournament.id, session=session)
             for match in matches:
                 if match.first_team_score is not None and match.second_team_score is not None:
                     for match_prediction in match.match_predictions:

@@ -103,7 +103,7 @@ async def get_random_distribution(message: Message, state: FSMContext):
     data = await state.get_data()
     tournament: Tournament = data["tournament"]
     number_of_groups = int(message.text)
-    await message.answer(f"В турнире будет {number_of_groups}")
+    await message.answer(f"В турнире будет {number_of_groups} групп")
     result = await random_distribution(tournament, number_of_groups)
     # В идеале сразу отправлять в группу сообщения
     await message.answer(result)
@@ -139,7 +139,13 @@ async def set_matches(message: Message, state: FSMContext):
     pass
 
 
-
+@router.message(
+    lambda message: message.text == "Посмотреть прогнозы игроков",
+    StateFilter(TournamentMenu.tournament_menu),
+)
+async def get_results(message: Message, state: FSMContext):
+    data = await state.get_data()
+    tournament: Tournament = data["tournament"]
         
 
     
