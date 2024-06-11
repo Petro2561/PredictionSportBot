@@ -4,6 +4,7 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder
 from bot.keyboards.callback_factory import TournamentCallbackFactory
 from bot.utils.utils_tournament import get_all_tournaments
 from db.models import User
+from aiogram.types.web_app_info import WebAppInfo
 
 
 button_next = InlineKeyboardButton(text="Далее", callback_data="next")
@@ -34,7 +35,7 @@ def keyboard_menu(user, tournament):
 
     if user.id == tournament.user.id:
         button_set_null = KeyboardButton(text="Обнулить очки игрокам")
-        button_set_matches = KeyboardButton(text="Установить матчи")
+        button_set_matches = KeyboardButton(text="Установить матчи", web_app=WebAppInfo(url='https://d1sney.github.io/WebAppPrediction'))
         button_set_matches_result = KeyboardButton(text="Проставить результаты матчей")
         button_make_groups = KeyboardButton(text="Провести жеребьевку")
         button_eliminate_plaayer = KeyboardButton(text="Убрать игрока из турнира")
