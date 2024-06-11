@@ -7,6 +7,9 @@ from db.models import User
 from aiogram.types.web_app_info import WebAppInfo
 
 
+button_next = InlineKeyboardButton(text="Далее", callback_data="next")
+inline_keyboard_next = InlineKeyboardMarkup(inline_keyboard=[[button_next]])
+
 def create_tournament_keyboard(user: User):
     tournaments = get_all_tournaments(user)
     if tournaments:

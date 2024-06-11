@@ -17,3 +17,4 @@ class FSMFillParametres(StatesGroup):
 class TournamentMenu(StatesGroup):
     tournament_menu = State()
     groups = State()
+    reset_points = State()

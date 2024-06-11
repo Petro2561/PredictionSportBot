@@ -4,6 +4,7 @@ from db.models import MatchPrediction, Player, Tournament
 from db.crud.match import crud_match
 from db.crud.tour import crud_tour
 from sqlalchemy.orm import selectinload
+from db.crud.reset_points import crud_resetpoints
 
 
 async def calculate_prediction_results(tournament: Tournament):
@@ -56,7 +57,21 @@ async def player_points_calculation(tournament: Tournament):
                 await session.commit()
 
 
-        
-              
+async def create_reset_points_obj(tournament: Tournament):
+    async for session in get_async_session():
+        data = {
+            "tournament_id": tournament.id,
+            "tour_id": tournament.current_tour_id
+        }
+        reset_points = await crud_resetpoints.create(data, session)
+        return reset_points
+    
 
+async def reset_points(tournament):
+    async for session in get_async_session():
+        for player in tournament.players:
+            player.points = 0
+            session.add(player)
+            await session.commit()
         
+            
