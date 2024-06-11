@@ -2,6 +2,7 @@ from aiogram import Router
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
+import json
 
 from bot.bot import main_bot
 from bot.filters.filters import IsTournamentOwner
@@ -130,13 +131,13 @@ async def get_results(message: Message, state: FSMContext):
         await message.answer('Пока турнир не начался')
 
 
-@router.message(
-    lambda message: message.text == "Установить мачти",
-    StateFilter(TournamentMenu.tournament_menu),
-)
-async def set_matches(message: Message, state: FSMContext):
+@router.message(lambda message: message.web_app_data)
+async def set_matches(web_app_message: Message, state: FSMContext):
     ### Вот здесь хэндлер для webapp
-    pass
+    first_team = json.loads(web_app_message.web_app_data.data)['firstTeam']
+    second_team = json.loads(web_app_message.web_app_data.data)['secondTeam']
+    tour_date = json.loads(web_app_message.web_app_data.data)['tourDate']
+    await web_app_message.answer(f'Матч: {first_team} - {second_team} пройдет {tour_date}')
 
 
 @router.message(
