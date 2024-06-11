@@ -32,3 +32,6 @@ def get_all_tournaments(user: User) -> Tournament:
 
 def eleminated_to_front(player: Player) -> str:
     return "Выбыл ❌" if player.is_eliminated else "В игре 💪"
+
+async def eliminate_player_from_tournament(tournament: Tournament, players):
+    pass

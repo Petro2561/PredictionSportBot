@@ -2,9 +2,12 @@ import logging
 import random
 from typing import Dict, List
 
+
+
+from bot.utils.common import get_predictions
 from db.crud import crud_group_history
 from db.db import get_async_session
-from db.models import GroupHistory, Player, Tournament
+from db.models import GroupHistory, MatchPrediction, Player, Tournament
 
 
 async def random_distribution(tournament: Tournament, number_of_groups: int):
@@ -23,18 +26,25 @@ async def random_distribution(tournament: Tournament, number_of_groups: int):
 
 
 
-async def show_distribution(group_distribution: Dict[str, List[int]], players: List[Player]):
+async def show_distribution(group_distribution: Dict[str, List[int]], players: List[Player], with_match_prediction=False):
     result_message = "Распределение по группам:\n"
-    player_dict = {player.id: player for player in players}
+    player_dict = {player.id: player for player in players if player.is_eliminated == False}
     
     for group_name, player_ids in group_distribution.items():
         result_message += f"\n{group_name}:\n"
         for player_id in player_ids:
             player = player_dict.get(player_id)
             if player:
-                result_message += f"{player.user.name} (@{player.user.username} {player.points})\n"
+                if with_match_prediction:
+                    prediction = await get_predictions(player)
+                    result_message += f"{player.user.name} @{player.user.username} Очки всего:{player.points} {prediction}\n"
+                else: 
+                    result_message += f"{player.user.name} @{player.user.username} {player.points}\n"
+            
     
     return result_message
+
+
 
 
 async def create_group_history(groups: List[list], tournament: Tournament):
@@ -62,6 +72,7 @@ async def set_player_groups(group_history: GroupHistory, tournament: Tournament)
         await session.commit()
 
 async def get_group_history(tournament):
+    """Возвращает последний распределение по группам"""
     async for session in get_async_session():
         group_history = await crud_group_history.get_last_group_history(tournament.id, session)
         return group_history

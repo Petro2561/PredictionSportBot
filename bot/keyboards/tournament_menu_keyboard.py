@@ -6,6 +6,9 @@ from bot.utils.utils_tournament import get_all_tournaments
 from db.models import User
 
 
+button_next = InlineKeyboardButton(text="Далее", callback_data="next")
+inline_keyboard_next = InlineKeyboardMarkup(inline_keyboard=[[button_next]])
+
 def create_tournament_keyboard(user: User):
     tournaments = get_all_tournaments(user)
     if tournaments:
