@@ -104,8 +104,8 @@ class Match(Base):
 class MatchPrediction(Base):
     __tablename__ = "match_prediction"
     id = Column(Integer, primary_key=True)
-    first_team_score = Column(Integer, nullable=False)
-    second_team_score = Column(Integer, nullable=False)
+    first_team_score = Column(Integer, default=0)
+    second_team_score = Column(Integer, default=0)
     match_id = Column(Integer, ForeignKey("match.id"), nullable=False)
     player_id = Column(Integer, ForeignKey("player.id"), nullable=False)
     points = Column(Integer, default=0)
