@@ -393,7 +393,7 @@ async def process_callback_next_button(callback_query: CallbackQuery, state: FSM
     current_tour_id = tournament.current_tour_id
     message_predictions = "Ваши прогнозы:\n"
     for prediction in player.match_predictions:
-        if prediction.match.tour.id == current_tour_id:
+        # if prediction.match.tour.id == current_tour_id:
             message_predictions += (f"{prediction.match.first_team}-{prediction.match.second_team}"
                                 f" {prediction.first_team_score}-{prediction.second_team_score}\n")
 
