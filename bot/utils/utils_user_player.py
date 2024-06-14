@@ -31,17 +31,28 @@ async def get_or_create_user(callback_query):
             logging.error("Не удалось добавить пользователя в базу", exc_info=True)
 
 
-async def create_player(data):
+async def get_or_create_player(data):
     async for session in get_async_session():
         try:
             existing_player = await crud_player.get_by_user_id(
                 data["user_id"], data["tournament_id"], session
             )
             if existing_player:
+                await session.refresh(existing_player, ["user", "tournament_predictions", "match_predictions"])
+                for match_prediction in existing_player.match_predictions:
+                    await session.refresh(match_prediction, ["match"])
                 return existing_player
             player = await crud_player.create(data, session)
-            await session.refresh(player, ["user"])
+            await session.refresh(player, ["user", "match_predictions", "tournament_predictions"])
             logging.info(f"Добавлен новый игрок {player.user.username}")
             return player
         except Exception:
             logging.error("Не удалось добавить пользователя в базу", exc_info=True)
+
+async def eleminate_player(tournament, users_to_eliminate):
+    async for session in get_async_session():
+        for player in tournament.players:
+            if player.user.username in users_to_eliminate:
+                player.is_eliminated = True
+                session.add(player)
+        await session.commit()

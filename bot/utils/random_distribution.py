@@ -37,12 +37,22 @@ async def show_distribution(group_distribution: Dict[str, List[int]], players: L
             if player:
                 if with_match_prediction:
                     prediction = await get_predictions(player)
-                    result_message += f"{player.user.name} @{player.user.username} Очки всего:{player.points} {prediction}\n"
+                    result_message += f"{player.user.name} @{player.user.username} Очки всего: {player.points} {prediction}\n"
                 else: 
-                    result_message += f"{player.user.name} @{player.user.username} {player.points}\n"
-            
-    
+                    result_message += f"{player.user.name} @{player.user.username} Очки: {player.points}\n"
     return result_message
+
+async def get_tournament_prediction(player: Player) -> str:
+    if player.tournament_predictions:
+        result_message = f""
+        prediction = player.tournament_predictions[0]
+        # if prediction.winner:
+        #     result_message += f"Победитель: {prediction.winner}\n"
+        if prediction.best_striker:
+            result_message += f"Голы: {prediction.best_striker}"
+        if prediction.best_assistant:
+            result_message += f" Пасы: {prediction.best_assistant}\n"
+        return result_message
 
 
 

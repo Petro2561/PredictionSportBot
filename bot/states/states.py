@@ -18,3 +18,13 @@ class TournamentMenu(StatesGroup):
     tournament_menu = State()
     groups = State()
     reset_points = State()
+    eleminate_player = State()
+    tour_date = State()
+    webapp_matches = State()
+    match_predictions = State()
+    match_results = State()
+
+class PredictionState(StatesGroup):
+    waiting_for_winner = State()
+    waiting_for_best_striker = State()
+    waiting_for_best_assistant = State()

@@ -14,7 +14,7 @@ from bot.keyboards.creator_keyboard import (
 )
 from bot.states.states import FSMFillParametres
 from bot.utils.utils_tournament import create_tournament_db
-from bot.utils.utils_user_player import create_player, get_or_create_user
+from bot.utils.utils_user_player import get_or_create_player, get_or_create_user
 
 START_PHRASE = "Этот бот для создания турниров прогнозов"
 START_TOURNAMENT_PHRASE = "Вы начали создание турнира."
@@ -30,14 +30,6 @@ ADDING_TO_TOURNAMENT = "Вы успешно добавлены в турнир"
 FILL_RESULTS_POINTS = "Введите очки за правильно угаданный результат"
 
 router = Router()
-
-
-@router.message(CommandStart(deep_link=True), PrivateChatFilter())
-async def handler(message: Message, command: CommandObject):
-    user = await get_or_create_user(message)
-    data_for_player = {"user_id": user.id, "tournament_id": int(command.args)}
-    await create_player(data_for_player)
-    await message.answer(ADDING_TO_TOURNAMENT)
 
 
 @router.message(CommandStart(), PrivateChatFilter())
@@ -115,9 +107,20 @@ async def fill_best_assistant(callback_query: CallbackQuery, state: FSMContext):
     await state.update_data(best_assistant=callback_query.data == "yes")
     await callback_query.message.delete()
     data = await state.get_data()
-    tournament = await create_tournament_db(data)
+    data_for_tournament = {
+        "name": data['name'],
+        "exact_score_points": data["exact_score_points"],
+        "results_points": data['results_points'],
+        "difference_points": data["difference_points"],
+        "winner": data['winner'],
+        "best_striker": data['best_striker'],
+        "best_assistant": data['best_assistant'],
+        "user_id": data["user_id"]
+    }
+    tournament = await create_tournament_db(data_for_tournament)
     summary = (
         f"Название турнира: {data['name']}\n"
+        f"Очки за точно угаданный счет: {data['exact_score_points']}\n"
         f"Очки за результаты: {data['results_points']}\n"
         f"Очки за разницу: {data['difference_points']}\n"
         f"Угадывание победителя: {'Да' if data['winner'] else 'Нет'}\n"

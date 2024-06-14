@@ -1,5 +1,5 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton
-from aiogram.utils.keyboard import ReplyKeyboardBuilder
+from aiogram.utils.keyboard import ReplyKeyboardBuilder, ReplyKeyboardMarkup
 
 from bot.keyboards.callback_factory import TournamentCallbackFactory
 from bot.utils.utils_tournament import get_all_tournaments
@@ -35,7 +35,7 @@ def keyboard_menu(user, tournament):
 
     if user.id == tournament.user.id:
         button_set_null = KeyboardButton(text="Обнулить очки игрокам")
-        button_set_matches = KeyboardButton(text="Установить матчи", web_app=WebAppInfo(url='https://d1sney.github.io/WebAppPrediction'))
+        button_set_matches = KeyboardButton(text="Установить матчи")
         button_set_matches_result = KeyboardButton(text="Проставить результаты матчей")
         button_make_groups = KeyboardButton(text="Провести жеребьевку")
         button_eliminate_plaayer = KeyboardButton(text="Убрать игрока из турнира")
@@ -43,3 +43,12 @@ def keyboard_menu(user, tournament):
         kb_builder.row(button_make_groups, button_set_matches_result, button_eliminate_plaayer, width=2)
     keyboard = kb_builder.as_markup(resize_keyboard=True, one_time_keyboard=True)
     return keyboard
+
+def webapp_keyboard():
+    kb_builder = ReplyKeyboardBuilder()
+    webapp_button = KeyboardButton(
+        text="Перейти к установке матчей",
+        web_app=WebAppInfo(url='https://d1sney.github.io/WebAppPrediction')
+    )
+    kb_builder.add(webapp_button)
+    return kb_builder.as_markup(resize_keyboard=True)
