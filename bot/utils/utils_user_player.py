@@ -40,7 +40,7 @@ async def get_or_create_player(data):
             if existing_player:
                 await session.refresh(existing_player, ["user", "tournament_predictions", "match_predictions"])
                 for match_prediction in existing_player.match_predictions:
-                    await session.refresh(match_prediction, ["match"])
+                    await session.refresh(match_prediction, ["match.tour"])
                 return existing_player
             player = await crud_player.create(data, session)
             await session.refresh(player, ["user", "match_predictions", "tournament_predictions"])
