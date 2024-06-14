@@ -81,10 +81,9 @@ class Tour(Base):
     number = Column(Integer, nullable=False)
     tournament_id = Column(Integer, ForeignKey("tournament.id"))
     next_deadline = Column(DateTime, nullable=False)
-    end_of_next_tour = Column(DateTime, nullable=False)
-    is_calculated = Column(Boolean, default=False)
 
     tournament = relationship("Tournament", back_populates="tours", foreign_keys=[tournament_id])
+    matches = relationship("Match", back_populates="tour")
     resetpoints = relationship("ResetPoints", back_populates="tour", foreign_keys="[ResetPoints.tour_id]")
 
 
@@ -95,10 +94,11 @@ class Match(Base):
     second_team_score = Column(Integer)
     first_team = Column(String, nullable=False)
     second_team = Column(String, nullable=False)
-    tour = Column(Integer, nullable=False)
+    tour_id = Column(Integer, ForeignKey("tour.id"))
     tournament_id = Column(Integer, ForeignKey("tournament.id"))
 
     tournament = relationship("Tournament", back_populates="matches")
+    tour = relationship("Tour", back_populates="matches")
     match_predictions = relationship("MatchPrediction", back_populates="match")
 
 class MatchPrediction(Base):
@@ -109,6 +109,7 @@ class MatchPrediction(Base):
     match_id = Column(Integer, ForeignKey("match.id"), nullable=False)
     player_id = Column(Integer, ForeignKey("player.id"), nullable=False)
     points = Column(Integer, default=0)
+    is_calculated = Column(Boolean, default=False)
 
     match = relationship("Match", back_populates="match_predictions")
     player = relationship("Player", back_populates="match_predictions")

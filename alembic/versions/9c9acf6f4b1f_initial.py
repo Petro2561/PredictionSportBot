@@ -1,8 +1,8 @@
 """Initial
 
-Revision ID: aab0e67b3d59
+Revision ID: 9c9acf6f4b1f
 Revises: 
-Create Date: 2024-06-10 16:50:24.764788
+Create Date: 2024-06-14 00:43:40.271665
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'aab0e67b3d59'
+revision: str = '9c9acf6f4b1f'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -25,8 +25,6 @@ def upgrade() -> None:
     sa.Column('number', sa.Integer(), nullable=False),
     sa.Column('tournament_id', sa.Integer(), nullable=True),
     sa.Column('next_deadline', sa.DateTime(), nullable=False),
-    sa.Column('end_of_next_tour', sa.DateTime(), nullable=False),
-    sa.Column('is_calculated', sa.Boolean(), nullable=True),
     sa.ForeignKeyConstraint(['tournament_id'], ['tournament.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -70,8 +68,9 @@ def upgrade() -> None:
     sa.Column('second_team_score', sa.Integer(), nullable=True),
     sa.Column('first_team', sa.String(), nullable=False),
     sa.Column('second_team', sa.String(), nullable=False),
-    sa.Column('tour', sa.Integer(), nullable=False),
+    sa.Column('tour_id', sa.Integer(), nullable=True),
     sa.Column('tournament_id', sa.Integer(), nullable=True),
+    sa.ForeignKeyConstraint(['tour_id'], ['tour.id'], ),
     sa.ForeignKeyConstraint(['tournament_id'], ['tournament.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -98,11 +97,12 @@ def upgrade() -> None:
     )
     op.create_table('match_prediction',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('first_team_score', sa.Integer(), nullable=False),
-    sa.Column('second_team_score', sa.Integer(), nullable=False),
+    sa.Column('first_team_score', sa.Integer(), nullable=True),
+    sa.Column('second_team_score', sa.Integer(), nullable=True),
     sa.Column('match_id', sa.Integer(), nullable=False),
     sa.Column('player_id', sa.Integer(), nullable=False),
     sa.Column('points', sa.Integer(), nullable=True),
+    sa.Column('is_calculated', sa.Boolean(), nullable=True),
     sa.ForeignKeyConstraint(['match_id'], ['match.id'], ),
     sa.ForeignKeyConstraint(['player_id'], ['player.id'], ),
     sa.PrimaryKeyConstraint('id'),
