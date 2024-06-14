@@ -1,0 +1,14 @@
+[Unit]
+Description=Prediction_bot
+After=syslog.target
+After=network.target
+
+[Service]
+Type=simple
+User=petro2561
+WorkingDirectory=/home/petro2561/PredictionSportBot
+ExecStart=/home/petro2561/PredictionSportBot/venv/bin/python3 /home/petro2561/PredictionSportBot/main.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
