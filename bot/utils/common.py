@@ -22,7 +22,7 @@ async def get_predictions(player: Player):
         player = player_with_predictions.scalars().first()
         if player:
             for prediction in player.match_predictions:
-                if prediction.match.tour.id == player.tournament.current_tour_id
+                if prediction.match.tour.id == player.tournament.current_tour_id:
                     result_message += f"{(prediction.match.first_team)} - {prediction.match.second_team} {prediction.first_team_score}-{prediction.second_team_score} Очки: {prediction.points} \n"
         return result_message
 
