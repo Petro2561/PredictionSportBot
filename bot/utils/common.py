@@ -17,7 +17,7 @@ async def get_predictions(player: Player):
                 .selectinload(Match.tour),
                 selectinload(Player.tournament)
             )
-            .where(Player.id == player.player_id, Player.is_eliminated == False)
+            .where(Player.id == player.id, Player.is_eliminated == False)
         )
         player = player_with_predictions.scalars().first()
         if player:
