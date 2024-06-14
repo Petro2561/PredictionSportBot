@@ -12,7 +12,7 @@ from bot.keyboards.tournament_menu_keyboard import (
     keyboard_menu,
     inline_keyboard_next
 )
-from bot.states.states import TournamentMenu
+from bot.states.states import TournamentMenu, FSMFillParametres
 from bot.utils.common import send_long_message
 from bot.utils.points_results import calculate_prediction_results, player_points_calculation, reset_points
 from bot.utils.random_distribution import get_group_history, random_distribution, show_distribution
@@ -135,8 +135,8 @@ async def get_results(message: Message, state: FSMContext):
     else:
         await message.answer('Пока турнир не начался')
 
-
-@router.message(lambda message: message.web_app_data)
+# --------------------------------WEB APP--------------------------------
+@router.message(lambda message: message.web_app_data is not None and 'firstTeam' in json.loads(message.web_app_data.data))
 async def set_matches(web_app_message: Message, state: FSMContext):
     ### Вот здесь хэндлер для webapp
     first_team = json.loads(web_app_message.web_app_data.data)['firstTeam']
@@ -144,6 +144,27 @@ async def set_matches(web_app_message: Message, state: FSMContext):
     tour_date = json.loads(web_app_message.web_app_data.data)['tourDate']
     await web_app_message.answer(f'Матч: {first_team} - {second_team} пройдет {tour_date}')
 
+
+@router.message(lambda message: message.web_app_data is not None and 'button_make_prediction' in json.loads(message.web_app_data.data))
+async def set_matches_predictions(web_app_message: Message, state: FSMContext):
+    ### Вот здесь хэндлер для webapp
+    # Здесь должно быть сохранение данных в бд
+    # так выглядит ответ от бд [{"firstTeam":"England","secondTeam":"Italy","firstAbb":"ENG","secondAbb":"ITA","firstScore":"0","secondScore":"3"},
+    # {"firstTeam":"Germany","secondTeam":"Netherlands","firstAbb":"GER","secondAbb":"NET","firstScore":"0","secondScore":"0"}]
+    # Список внутри которого словари с ключами, один словарь - один матч
+    await web_app_message.answer('Cделать прогноз')
+    await web_app_message.answer(web_app_message.web_app_data.data)
+
+@router.message(lambda message: message.web_app_data is not None and 'button_set_matches_result' in json.loads(message.web_app_data.data))
+async def set_matches_predictions(web_app_message: Message, state: FSMContext):
+    ### Вот здесь хэндлер для webapp
+    # Здесь должно быть сохранение данных в бд
+    # так выглядит ответ от бд [{"firstTeam":"England","secondTeam":"Italy","firstAbb":"ENG","secondAbb":"ITA","firstScore":"0","secondScore":"3"},
+    # {"firstTeam":"Germany","secondTeam":"Netherlands","firstAbb":"GER","secondAbb":"NET","firstScore":"0","secondScore":"0"}]
+    # Список внутри которого словари с ключами, один словарь - один матч, важно обращаться к данным с использованием json.loads - json.loads(message.web_app_data.data)
+    await web_app_message.answer('Проставить результаты матчей')
+    await web_app_message.answer(web_app_message.web_app_data.data)
+# -----------------------------------------------------------------------
 
 @router.message(
     lambda message: message.text == "Посмотреть прогнозы игроков",
