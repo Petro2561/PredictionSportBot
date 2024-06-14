@@ -33,7 +33,7 @@ async def create_match_prediction(match, tournament, first_team_score=0, second_
             }
             match_prediction = await crud_match_prediction.create(data_match, session)
             session.add(match_prediction)
-            await session.commit()
+        await session.commit()
             
 async def update_match_prediction_for_player(match_id, player_id, first_team_score, second_team_score):
     async for session in get_async_session():    
