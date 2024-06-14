@@ -396,7 +396,6 @@ async def process_callback_next_button(callback_query: CallbackQuery, state: FSM
         if prediction.match.tour.id == current_tour_id:
             message_predictions += (f"{prediction.match.first_team}-{prediction.match.second_team}"
                                 f" {prediction.first_team_score}-{prediction.second_team_score}\n")
-
     await callback_query.message.answer('Прогнозы на матчи тура успешно заполнены', reply_markup=keyboard_menu(user=data["user"], tournament=data["tournament"]))
     await callback_query.message.answer(message_predictions)
     await callback_query.message.answer(f'Если хотите поменять прогнозы, просто начните заново и поменяйте нужный матч')
