@@ -2,7 +2,8 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardBu
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, ReplyKeyboardMarkup
 
 from bot.keyboards.callback_factory import TournamentCallbackFactory
-from bot.utils.utils_tournament import get_all_tournaments
+from bot.utils.utils_match import validate_tour_date
+from bot.utils.utils_tournament import get_all_tournaments, get_tournament
 from db.models import User
 from aiogram.types.web_app_info import WebAppInfo
 
@@ -23,15 +24,34 @@ def create_tournament_keyboard(user: User):
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
     return None
 
+async def generate_link(tournament):
+    teams = ''
+    tournament = await get_tournament(tournament.id)
+    matches = [match for match in tournament.matches if tournament.current_tour_id == match.tour.id]
+    matches.sort(key=lambda match: match.id)
+    if matches:
+        for match in matches:
+            teams += f'{match.first_team}-{match.second_team},'
+        teams = teams.rstrip(',')
+        return f'https://d1sney.github.io/WebAppPrediction/prediction-match?matches=[{teams}]'
+    else:
+        return f'https://d1sney.github.io/WebAppPrediction/prediction-match?matches=[{teams}]'
 
-def keyboard_menu(user, tournament):
+async def keyboard_menu(user, tournament):
     kb_builder = ReplyKeyboardBuilder()
     button_players = KeyboardButton(text="Посмотреть список участников")
     button_table = KeyboardButton(text="Посмотреть таблицу")
-    button_make_prediction = KeyboardButton(text="Сделать прогноз")
-    button_show_predictions = KeyboardButton(text="Посмотреть прогнозы игроков")
-    kb_builder.row(button_players, button_table, width=2)
-    kb_builder.row(button_make_prediction, button_show_predictions, width=2)
+    if tournament.current_tour_id:
+        date_validation = await validate_tour_date(tournament)
+        if date_validation:
+            button_make_prediction = KeyboardButton(text="Сделать прогноз", web_app=WebAppInfo(url=await generate_link(tournament=tournament)))
+        else:
+            button_make_prediction = KeyboardButton(text="Сделать прогноз") 
+        button_show_predictions = KeyboardButton(text="Посмотреть прогнозы игроков")
+        kb_builder.row(button_players, button_table, width=2)
+        kb_builder.row(button_show_predictions, button_make_prediction, width=2)
+    button_text = KeyboardButton(text="Сделать прогноз через текст")    
+    kb_builder.row(button_text)
 
     if user.id == tournament.user.id:
         button_set_null = KeyboardButton(text="Обнулить очки игрокам")

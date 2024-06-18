@@ -32,7 +32,7 @@ async def send_reminders():
                         await session.refresh(player, ['user'])
                         await main_bot.send_message(
                             chat_id=player.user.telegram_id,
-                            text=f"Напоминание: у вас есть матчи, которые начнутся через 5 часов!"
+                            text=f"Напоминание: сегодня дедлайн по прогнозам!"
                         )
 
 scheduler.add_job(send_reminders, CronTrigger(hour='*/2'))

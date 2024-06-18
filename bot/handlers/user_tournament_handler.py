@@ -55,7 +55,7 @@ async def process_winner_prediction(message: Message, state: FSMContext):
     else:
         await save_predictions(state)
         await state.set_state(TournamentMenu.tournament_menu)
-        await message.answer('Вы в главном меню', reply_markup=keyboard_menu(user=data["user"], tournament=tournament))
+        await message.answer('Вы в главном меню', reply_markup=await keyboard_menu(user=data["user"], tournament=tournament))
 
 @router.message(StateFilter(PredictionState.waiting_for_best_striker))
 async def process_best_striker_prediction(message: Message, state: FSMContext):
@@ -71,7 +71,7 @@ async def process_best_striker_prediction(message: Message, state: FSMContext):
     else:
         await save_predictions(state)
         await state.set_state(TournamentMenu.tournament_menu)
-        await message.answer('Вы в главном меню', reply_markup=keyboard_menu(user=data["user"], tournament=tournament))
+        await message.answer('Вы в главном меню', reply_markup=await keyboard_menu(user=data["user"], tournament=tournament))
 
 @router.message(StateFilter(PredictionState.waiting_for_best_assistant))
 async def process_best_assistant_prediction(message: Message, state: FSMContext):
@@ -91,6 +91,6 @@ async def process_best_assistant_prediction(message: Message, state: FSMContext)
     
     await save_predictions(prediction_data)
     await state.set_state(TournamentMenu.tournament_menu)
-    await message.answer('Ура! Вы в турнире!', reply_markup=keyboard_menu(user=data["user"], tournament=tournament))
+    await message.answer('Ура! Вы в турнире!', reply_markup=await keyboard_menu(user=data["user"], tournament=tournament))
 
 

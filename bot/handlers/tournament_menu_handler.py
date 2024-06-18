@@ -18,7 +18,7 @@ from bot.states.states import TournamentMenu
 from bot.utils.common import get_tour, send_long_message
 from bot.utils.points_results import calculate_prediction_results, player_points_calculation, reset_points
 from bot.utils.random_distribution import get_group_history, get_tournament_prediction, random_distribution, show_distribution
-from bot.utils.utils_match import create_match, create_match_prediction, get_match_by_id, update_match_prediction_for_player, update_match_results, validate_prediction, validate_tour_date
+from bot.utils.utils_match import create_match, create_match_prediction, get_match_by_id, get_match_by_teams, update_match_prediction_for_player, update_match_results, validate_prediction, validate_tour_date
 from bot.utils.utils_tournament import (
     create_tour_for_tournament,
     eleminated_to_front,
@@ -61,7 +61,7 @@ async def create_tournament_handler(callback_query: CallbackQuery, state: FSMCon
         await state.update_data(tournament=tournament)
         await callback_query.message.answer(
             f"Вы в турнире {tournament.name}",
-            reply_markup=keyboard_menu(tournament=tournament, user=user),
+            reply_markup= await keyboard_menu(tournament=tournament, user=user),
         )
 
 
@@ -77,7 +77,7 @@ async def process_callback_tournament(
     data = await state.get_data()
     await callback_query.message.answer(
         f"Вы в турнире {tournament.name}",
-        reply_markup=keyboard_menu(tournament=tournament, user=data["user"]),
+        reply_markup=await keyboard_menu(tournament=tournament, user=data["user"]),
     )
     data = {
             "tournament_id": tournament.id,
@@ -106,9 +106,9 @@ async def get_users(message: Message, state: FSMContext):
     )
     if not users_info:
         await message.answer("Нет участников в этом турнире.")
-        await message.answer('Вы в главном меню', reply_markup=keyboard_menu(user=data["user"], tournament=data["tournament"]))
+        await message.answer('Вы в главном меню', reply_markup=await keyboard_menu(user=data["user"], tournament=data["tournament"]))
     else:
-        await message.answer(users_info, reply_markup=keyboard_menu(user=data["user"], tournament=data["tournament"]))
+        await message.answer(users_info, reply_markup=await keyboard_menu(user=data["user"], tournament=data["tournament"]))
 
 
 @router.message(
@@ -135,7 +135,7 @@ async def get_random_distribution(message: Message, state: FSMContext):
     # В идеале сразу отправлять в группу сообщения
     await message.answer(result)
     await state.set_state(TournamentMenu.tournament_menu)
-    await message.answer('Вы в главном меню', reply_markup=keyboard_menu(user=data["user"], tournament=tournament))
+    await message.answer('Вы в главном меню', reply_markup= await keyboard_menu(user=data["user"], tournament=tournament))
 
 @router.message(
     lambda message: message.text == "Посмотреть таблицу",
@@ -151,11 +151,11 @@ async def get_results(message: Message, state: FSMContext):
         if groups:
             tournament = await get_tournament(tournament.id)
             results = await show_distribution(groups.group_distribution, tournament.players)
-            await message.answer(results, reply_markup=keyboard_menu(user=data["user"], tournament=tournament))
+            await message.answer(results, reply_markup=await keyboard_menu(user=data["user"], tournament=tournament))
         else:
-            await message.answer('Пока нет групп!', reply_markup=keyboard_menu(user=data["user"], tournament=tournament))
+            await message.answer('Пока нет групп!', reply_markup=await keyboard_menu(user=data["user"], tournament=tournament))
     else:
-        await message.answer('Пока турнир не начался', reply_markup=keyboard_menu(user=data["user"], tournament=tournament))
+        await message.answer('Пока турнир не начался', reply_markup=await keyboard_menu(user=data["user"], tournament=tournament))
 
 @router.message(
     lambda message: message.text == "Установить матчи",
@@ -183,7 +183,6 @@ async def validate_date(message: Message, state: FSMContext):
 async def set_matches(web_app_message: Message, state: FSMContext):
     first_team = json.loads(web_app_message.web_app_data.data)['firstTeam']
     second_team = json.loads(web_app_message.web_app_data.data)['secondTeam']
-    tour_date = json.loads(web_app_message.web_app_data.data)['tourDate']
     await web_app_message.answer(f'Матч: {first_team}-{second_team} добавлен!')
     data = await state.get_data()
     match = await create_match(data, first_team, second_team)
@@ -200,7 +199,7 @@ async def process_callback_next_button(callback_query: CallbackQuery, state: FSM
     await state.set_state(TournamentMenu.tournament_menu)
     data = await state.get_data()
     await callback_query.message.delete()
-    await callback_query.message.answer('Матчи тура успешно заполнены', reply_markup=keyboard_menu(user=data["user"], tournament=data["tournament"]))
+    await callback_query.message.answer('Матчи тура успешно заполнены', reply_markup=await keyboard_menu(user=data["user"], tournament=data["tournament"]))
 
 
 @router.message(
@@ -217,11 +216,11 @@ async def get_predictions(message: Message, state: FSMContext):
             if groups:
                 predictions = await show_distribution(groups.group_distribution, tournament.players, with_match_prediction=True)
                 await send_long_message(message.chat.id, predictions, message.bot)
-                await message.answer("Вы в главном меню", reply_markup=keyboard_menu(user=data["user"], tournament=tournament))
+                await message.answer("Вы в главном меню", reply_markup=await keyboard_menu(user=data["user"], tournament=tournament))
             else:
-                await message.answer("Вначале проведите жеребьевку", reply_markup=keyboard_menu(user=data["user"], tournament=tournament))
+                await message.answer("Вначале проведите жеребьевку", reply_markup=await keyboard_menu(user=data["user"], tournament=tournament))
         else:
-            await message.answer('Прогнозы игроков будут доступны за час до тура', reply_markup=keyboard_menu(user=data["user"], tournament=tournament))
+            await message.answer('Прогнозы игроков будут доступны за час до тура', reply_markup=await keyboard_menu(user=data["user"], tournament=tournament))
     else:
         await message.answer('Админ еще не установил матчи')
 
@@ -239,7 +238,7 @@ async def set_matches(message: Message, state: FSMContext):
     StateFilter(TournamentMenu.reset_points),
     IsTournamentOwner()
 )
-async def fill_winner(callback_query: CallbackQuery, state: FSMContext):
+async def set_null(callback_query: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     tournament: Tournament = data["tournament"]
     await state.update_data(winner=callback_query.data == "yes")
@@ -251,7 +250,7 @@ async def fill_winner(callback_query: CallbackQuery, state: FSMContext):
     results = await show_distribution(groups.group_distribution, tournament.players)
     await callback_query.message.answer(results)
     await state.set_state(TournamentMenu.tournament_menu)
-    await callback_query.message.answer('Вы в главном меню', reply_markup=keyboard_menu(user=data["user"], tournament=tournament))
+    await callback_query.message.answer('Вы в главном меню', reply_markup=await keyboard_menu(user=data["user"], tournament=tournament))
 
 @router.callback_query(
     lambda callback: callback.data == "no",
@@ -264,7 +263,7 @@ async def fill_winner(callback_query: CallbackQuery, state: FSMContext):
     await state.set_state(TournamentMenu.tournament_menu)
     await callback_query.message.answer(
         'Все хорошо ничего не удалилось',
-        reply_markup=keyboard_menu(tournament=data["tournament"], user=data["user"]),
+        reply_markup=await keyboard_menu(tournament=data["tournament"], user=data["user"]),
     )
     
 @router.message(
@@ -319,11 +318,47 @@ async def process_callback_next_button(callback_query: CallbackQuery, state: FSM
     )
     await callback_query.message.answer(users_info)
     await state.set_state(TournamentMenu.tournament_menu)
-    await callback_query.message.answer('Вы в главном меню', reply_markup=keyboard_menu(user=data["user"], tournament=data["tournament"]))
+    await callback_query.message.answer('Вы в главном меню', reply_markup=await keyboard_menu(user=data["user"], tournament=data["tournament"]))
 
     
 @router.message(
     lambda message: message.text == "Сделать прогноз",
+    StateFilter(TournamentMenu.tournament_menu),
+)
+async def give_prediction(message: Message, state: FSMContext):
+    data = await state.get_data()
+    await message.answer('Тур уже начался или начинается раньше чем через час. Если вы не успели 😔, бот проставил вам 0-0 все матчи')
+
+
+@router.message(lambda message: message.web_app_data,
+    StateFilter(TournamentMenu.tournament_menu)
+)
+async def receive_prediction(web_app_message: Message, state: FSMContext):
+    for match in json.loads(web_app_message.web_app_data.data):
+        if match:
+            first_team = match['firstTeam']
+            second_team = match['secondTeam']
+            first_team_score = match['firstScore']
+            second_team_score = match['secondScore']
+            data = await state.get_data()
+            tournament = await get_tournament(data["tournament"].id)
+            match = await get_match_by_teams(tournament, first_team, second_team)
+            player: Player = await get_or_create_player(
+                {
+                    "tournament_id": data["tournament"].id,
+                    "user_id": data["user"].id
+                }
+            )
+            await update_match_prediction_for_player(match_id=match.id, player_id=player.id, first_team_score=first_team_score, second_team_score=second_team_score)
+    message_predictions = "Ваши прогнозы:\n"
+    for prediction in player.match_predictions:
+        if prediction.match.tour.id == tournament.current_tour_id:
+            message_predictions += (f"{prediction.match.first_team}-{prediction.match.second_team}"
+                                f" {prediction.first_team_score}-{prediction.second_team_score}\n")
+    await web_app_message.answer(message_predictions, reply_markup= await keyboard_menu(user=data["user"], tournament=data["tournament"]))
+
+@router.message(
+    lambda message: message.text == "Сделать прогноз через текст",
     StateFilter(TournamentMenu.tournament_menu),
 )
 async def give_prediction(message: Message, state: FSMContext):
@@ -346,7 +381,6 @@ async def give_prediction(message: Message, state: FSMContext):
             await message.answer('Тур уже начался или начинается раньше чем через час. вы не успели 😔, бот проставил вам 0-0 все матчи')
     else:
         await message.answer('Админ еще не установил матчи')
-
 
 @router.message(
     StateFilter(TournamentMenu.match_predictions),
@@ -396,7 +430,8 @@ async def process_callback_next_button(callback_query: CallbackQuery, state: FSM
         if prediction.match.tour.id == current_tour_id:
             message_predictions += (f"{prediction.match.first_team}-{prediction.match.second_team}"
                                 f" {prediction.first_team_score}-{prediction.second_team_score}\n")
-    await callback_query.message.answer('Прогнозы на матчи тура успешно заполнены', reply_markup=keyboard_menu(user=data["user"], tournament=data["tournament"]))
+
+    await callback_query.message.answer('Прогнозы на матчи тура успешно заполнены', reply_markup= await keyboard_menu(user=data["user"], tournament=data["tournament"]))
     await callback_query.message.answer(message_predictions)
     await callback_query.message.answer(f'Если хотите поменять прогнозы, просто начните заново и поменяйте нужный матч')
     root_dir = Path(os.getcwd())
@@ -454,4 +489,4 @@ async def process_callback_next_button(callback_query: CallbackQuery, state: FSM
     await state.set_state(TournamentMenu.tournament_menu)
     data = await state.get_data()
     await callback_query.message.delete()
-    await callback_query.message.answer('Результаты на матчи тура успешно заполнены', reply_markup=keyboard_menu(user=data["user"], tournament=data["tournament"]))
+    await callback_query.message.answer('Результаты на матчи тура успешно заполнены', reply_markup=await keyboard_menu(user=data["user"], tournament=data["tournament"]))

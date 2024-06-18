@@ -81,3 +81,8 @@ async def update_match_results(match_id, first_team_score, second_team_score):
             session.add(match)
             await session.commit()
             return match
+
+async def get_match_by_teams(tournament, first_team, second_team):
+    async for session in get_async_session():    
+        match: Match = await crud_match.get_match_by_teams(first_team, second_team, tournament, session)
+        return match

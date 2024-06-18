@@ -1,5 +1,5 @@
 from db.crud.crud_base import CRUDBase
-from db.models import Match
+from db.models import Match, Tournament
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
@@ -19,6 +19,12 @@ class CRUDMatch(CRUDBase):
             select(self.model).where(
                 self.model.id == match_id
             )
+        )
+        return db_obj.scalars().first()
+    
+    async def get_match_by_teams(self, first_team, second_team, tournament: Tournament, session: AsyncSession):
+        db_obj = await session.execute(
+            select(self.model).where(self.model.tour_id == tournament.current_tour_id, self.model.first_team == first_team, self.model.second_team == second_team).options(joinedload(self.model.match_predictions))
         )
         return db_obj.scalars().first()
     
