@@ -334,23 +334,29 @@ async def give_prediction(message: Message, state: FSMContext):
     StateFilter(TournamentMenu.tournament_menu)
 )
 async def receive_prediction(web_app_message: Message, state: FSMContext):
-    for match in json.loads(web_app_message.web_app_data.data):
-        if match:
-            first_team = match['firstTeam']
-            second_team = match['secondTeam']
-            first_team_score = match['firstScore']
-            second_team_score = match['secondScore']
-            data = await state.get_data()
-            tournament = await get_tournament(data["tournament"].id)
+    data = await state.get_data()
+    tournament = await get_tournament(data["tournament"].id)
+    player: Player = await get_or_create_player(
+        {
+            "tournament_id": data["tournament"].id,
+            "user_id": data["user"].id
+        }
+    )
+    for match_json in json.loads(web_app_message.web_app_data.data):
+        if match_json:
+            first_team = match_json['firstTeam']
+            second_team = match_json['secondTeam']
+            first_team_score = match_json['firstScore']
+            second_team_score = match_json['secondScore']
             match = await get_match_by_teams(tournament, first_team, second_team)
-            player: Player = await get_or_create_player(
-                {
-                    "tournament_id": data["tournament"].id,
-                    "user_id": data["user"].id
-                }
-            )
             await update_match_prediction_for_player(match_id=match.id, player_id=player.id, first_team_score=first_team_score, second_team_score=second_team_score)
     message_predictions = "Ваши прогнозы:\n"
+    player: Player = await get_or_create_player(
+        {
+            "tournament_id": data["tournament"].id,
+            "user_id": data["user"].id
+        }
+    )
     for prediction in player.match_predictions:
         if prediction.match.tour.id == tournament.current_tour_id:
             message_predictions += (f"{prediction.match.first_team}-{prediction.match.second_team}"
