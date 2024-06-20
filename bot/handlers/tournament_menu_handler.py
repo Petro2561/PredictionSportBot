@@ -4,7 +4,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 import json
 
-from bot.bot import main_bot
 from bot.errors.error import PredictionValidationError
 from bot.filters.filters import IsTournamentOwner
 from bot.keyboards.callback_factory import TournamentCallbackFactory
@@ -27,12 +26,9 @@ from bot.utils.utils_tournament import (
 )
 from bot.utils.utils_user_player import eleminate_player, get_or_create_player, get_or_create_user
 from bot.utils.points_results import create_reset_points_obj
-from db.db import get_async_session
-from db.models import MatchPrediction, Player, Tour, Tournament, User
+from db.models import Player, Tour, Tournament, User
 from bot.keyboards.creator_keyboard import yes_no_keyboard
 from datetime import datetime, timedelta
-import os
-from pathlib import Path
 
 router = Router()
 
@@ -440,11 +436,6 @@ async def process_callback_next_button(callback_query: CallbackQuery, state: FSM
     await callback_query.message.answer('Прогнозы на матчи тура успешно заполнены', reply_markup= await keyboard_menu(user=data["user"], tournament=data["tournament"]))
     await callback_query.message.answer(message_predictions)
     await callback_query.message.answer(f'Если хотите поменять прогнозы, просто начните заново и поменяйте нужный матч')
-    root_dir = Path(os.getcwd())
-    file_path = root_dir / 'prediction.txt'
-    with file_path.open('w', encoding='utf-8') as txtfile:
-        message_predictions += f'{player.user.username}_{player.user.name}'
-        txtfile.write(message_predictions)
 
 
 @router.message(
