@@ -24,6 +24,7 @@ class TournamentMenu(StatesGroup):
     match_predictions = State()
     match_results = State()
 
+
 class PredictionState(StatesGroup):
     waiting_for_winner = State()
     waiting_for_best_striker = State()

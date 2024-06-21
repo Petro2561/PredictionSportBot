@@ -2,8 +2,6 @@ import logging
 import random
 from typing import Dict, List
 
-
-
 from bot.utils.common import get_predictions
 from db.crud import crud_group_history
 from db.db import get_async_session
@@ -25,11 +23,16 @@ async def random_distribution(tournament: Tournament, number_of_groups: int):
         logging.error("Что-то пошло нет так при жеребьевке", exc_info=True)
 
 
-
-async def show_distribution(group_distribution: Dict[str, List[int]], players: List[Player], with_match_prediction=False):
+async def show_distribution(
+    group_distribution: Dict[str, List[int]],
+    players: List[Player],
+    with_match_prediction=False,
+):
     result_message = "Распределение по группам:\n"
-    player_dict = {player.id: player for player in players if player.is_eliminated == False}
-    
+    player_dict = {
+        player.id: player for player in players if player.is_eliminated == False
+    }
+
     for group_name, player_ids in group_distribution.items():
         result_message += f"\n{group_name}:\n"
         for player_id in player_ids:
@@ -38,9 +41,10 @@ async def show_distribution(group_distribution: Dict[str, List[int]], players: L
                 if with_match_prediction:
                     prediction = await get_predictions(player)
                     result_message += f"{player.user.name} @{player.user.username} Очки всего: {player.points} {prediction}\n"
-                else: 
+                else:
                     result_message += f"{player.user.name} @{player.user.username} Очки: {player.points}\n"
     return result_message
+
 
 async def get_tournament_prediction(player: Player) -> str:
     if player.tournament_predictions:
@@ -53,8 +57,6 @@ async def get_tournament_prediction(player: Player) -> str:
         if prediction.best_assistant:
             result_message += f" Пасы: {prediction.best_assistant}\n"
         return result_message
-
-
 
 
 async def create_group_history(groups: List[list], tournament: Tournament):
@@ -81,8 +83,11 @@ async def set_player_groups(group_history: GroupHistory, tournament: Tournament)
                     session.add(player)
         await session.commit()
 
+
 async def get_group_history(tournament):
     """Возвращает последний распределение по группам"""
     async for session in get_async_session():
-        group_history = await crud_group_history.get_last_group_history(tournament.id, session)
+        group_history = await crud_group_history.get_last_group_history(
+            tournament.id, session
+        )
         return group_history

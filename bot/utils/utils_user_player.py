@@ -38,14 +38,20 @@ async def get_or_create_player(data):
                 data["user_id"], data["tournament_id"], session
             )
             if existing_player:
-                await session.refresh(existing_player, ["user", "tournament_predictions", "match_predictions"])
+                await session.refresh(
+                    existing_player,
+                    ["user", "tournament_predictions", "match_predictions"],
+                )
                 return existing_player
             player = await crud_player.create(data, session)
-            await session.refresh(player, ["user", "match_predictions", "tournament_predictions"])
+            await session.refresh(
+                player, ["user", "match_predictions", "tournament_predictions"]
+            )
             logging.info(f"Добавлен новый игрок {player.user.username}")
             return player
         except Exception:
             logging.error("Не удалось добавить пользователя в базу", exc_info=True)
+
 
 async def eleminate_player(tournament, users_to_eliminate):
     async for session in get_async_session():

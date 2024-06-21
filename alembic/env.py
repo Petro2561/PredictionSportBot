@@ -4,14 +4,8 @@ from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 from db.models import Base  # Импортируйте вашу базу данных из вашего модуля
-from db.models import (
-    Match,
-    MatchPrediction,
-    Player,
-    Tournament,
-    TournamentPrediction,
-    User,
-)
+from db.models import (Match, MatchPrediction, Player, Tournament,
+                       TournamentPrediction, User)
 
 target_metadata = Base.metadata
 print(target_metadata.tables)

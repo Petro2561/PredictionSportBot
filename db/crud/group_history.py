@@ -1,7 +1,8 @@
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from db.crud.crud_base import CRUDBase
 from db.models import GroupHistory
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
 
 class CRUDGroupHistory(CRUDBase):

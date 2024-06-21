@@ -1,9 +1,10 @@
 from aiogram import Bot
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
+
+from db.crud.tour import crud_tour
 from db.db import get_async_session
 from db.models import Match, MatchPrediction, Player, Tournament
-from db.crud.tour import crud_tour
 
 
 async def get_predictions(player: Player):
@@ -15,7 +16,7 @@ async def get_predictions(player: Player):
                 selectinload(Player.match_predictions)
                 .selectinload(MatchPrediction.match)
                 .selectinload(Match.tour),
-                selectinload(Player.tournament)
+                selectinload(Player.tournament),
             )
             .where(Player.id == player.id, Player.is_eliminated == False)
         )
@@ -26,14 +27,15 @@ async def get_predictions(player: Player):
                     result_message += f"{(prediction.match.first_team)} - {prediction.match.second_team} {prediction.first_team_score}-{prediction.second_team_score} Очки: {prediction.points} \n"
         return result_message
 
+
 async def send_long_message(chat_id: int, message: str, bot: Bot):
     max_length = 4096
-    parts = [message[i:i + max_length] for i in range(0, len(message), max_length)]
+    parts = [message[i : i + max_length] for i in range(0, len(message), max_length)]
     for part in parts:
         await bot.send_message(chat_id, part)
+
 
 async def get_tour(tournament: Tournament):
     async for session in get_async_session():
         tour = await crud_tour.get_tour_by_id(tournament.current_tour_id, session)
         return tour
-

@@ -1,24 +1,27 @@
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
 from datetime import datetime, timedelta
 
-from bot.utils.common import get_tour
-from db.crud import crud_tournament
-from db.db import get_async_session
-from db.models import Player, Tour, Tournament, MatchPrediction
-from bot.bot import main_bot
-
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
+from bot.bot import main_bot
+from bot.utils.common import get_tour
+from db.crud import crud_tournament
+from db.db import get_async_session
+from db.models import MatchPrediction, Player, Tour, Tournament
+
 scheduler = AsyncIOScheduler()
+
 
 async def send_reminders():
     async for session in get_async_session():
         result = await session.execute(
-            select(Tournament).options(selectinload(Tournament.players).selectinload(Player.user))
+            select(Tournament).options(
+                selectinload(Tournament.players).selectinload(Player.user)
+            )
         )
-        tournaments = result.scalars().all() 
+        tournaments = result.scalars().all()
         for tournament in tournaments:
             if tournament.players:
                 players = tournament.players
@@ -29,10 +32,11 @@ async def send_reminders():
                 current_time = datetime.now()
                 if current_time >= reminder_time:
                     for player in players:
-                        await session.refresh(player, ['user'])
+                        await session.refresh(player, ["user"])
                         await main_bot.send_message(
                             chat_id=player.user.telegram_id,
-                            text=f"Напоминание: сегодня дедлайн по прогнозам!"
+                            text=f"Напоминание: сегодня дедлайн по прогнозам!",
                         )
 
-scheduler.add_job(send_reminders, CronTrigger(hour='*/2'))
+
+scheduler.add_job(send_reminders, CronTrigger(hour="*/2"))

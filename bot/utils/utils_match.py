@@ -1,11 +1,12 @@
 import select
+from datetime import datetime, timedelta
+
 from bot.errors.error import PredictionValidationError
 from db.crud.match import crud_match
 from db.crud.match_prediction import crud_match_prediction
+from db.crud.tour import crud_tour
 from db.db import get_async_session
 from db.models import Match, MatchPrediction, Tour, Tournament
-from datetime import datetime, timedelta
-from db.crud.tour import crud_tour
 
 
 async def create_match(data, first_team, second_team):
@@ -14,7 +15,7 @@ async def create_match(data, first_team, second_team):
             "first_team": first_team,
             "second_team": second_team,
             "tournament_id": data["tournament"].id,
-            "tour_id": data["tour"].id
+            "tour_id": data["tour"].id,
         }
         match = await crud_match.create(data_match, session)
         session.add(match)
@@ -22,7 +23,9 @@ async def create_match(data, first_team, second_team):
         return match
 
 
-async def create_match_prediction(match, tournament, first_team_score=0, second_team_score=0):
+async def create_match_prediction(
+    match, tournament, first_team_score=0, second_team_score=0
+):
     async for session in get_async_session():
         for player in tournament.players:
             data_match = {
@@ -34,10 +37,17 @@ async def create_match_prediction(match, tournament, first_team_score=0, second_
             match_prediction = await crud_match_prediction.create(data_match, session)
             session.add(match_prediction)
         await session.commit()
-            
-async def update_match_prediction_for_player(match_id, player_id, first_team_score, second_team_score):
-    async for session in get_async_session():    
-        match_prediction = await crud_match_prediction.get_match_prediction_by_match_id_and_player_id(match_id, player_id, session)
+
+
+async def update_match_prediction_for_player(
+    match_id, player_id, first_team_score, second_team_score
+):
+    async for session in get_async_session():
+        match_prediction = (
+            await crud_match_prediction.get_match_prediction_by_match_id_and_player_id(
+                match_id, player_id, session
+            )
+        )
         if match_prediction:
             match_prediction.first_team_score = first_team_score
             match_prediction.second_team_score = second_team_score
@@ -49,15 +59,17 @@ async def update_match_prediction_for_player(match_id, player_id, first_team_sco
                 "match_id": match_id,
                 "player_id": player_id,
                 "first_team_score": first_team_score,
-                "second_team_score": second_team_score
+                "second_team_score": second_team_score,
             }
             match_prediction = await crud_match_prediction.create(data, session)
             return match_prediction
 
+
 async def get_match_by_id(match_id) -> Match:
-    async for session in get_async_session():    
+    async for session in get_async_session():
         match = await crud_match.get_match_by_id(match_id, session)
         return match
+
 
 async def validate_prediction(match_id, first_team, second_team):
     match = await get_match_by_id(match_id)
@@ -73,7 +85,7 @@ async def validate_tour_date(tournament: Tournament):
 
 
 async def update_match_results(match_id, first_team_score, second_team_score):
-    async for session in get_async_session():    
+    async for session in get_async_session():
         match: Match = await crud_match.get_match_by_id(match_id, session)
         if match:
             match.first_team_score = first_team_score
@@ -82,7 +94,10 @@ async def update_match_results(match_id, first_team_score, second_team_score):
             await session.commit()
             return match
 
+
 async def get_match_by_teams(tournament, first_team, second_team):
-    async for session in get_async_session():    
-        match: Match = await crud_match.get_match_by_teams(first_team, second_team, tournament, session)
+    async for session in get_async_session():
+        match: Match = await crud_match.get_match_by_teams(
+            first_team, second_team, tournament, session
+        )
         return match

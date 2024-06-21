@@ -6,15 +6,14 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from bot.filters.filters import PrivateChatFilter
-from bot.keyboards.creator_keyboard import (
-    get_add_bot_keyboard,
-    join_tournament_keyboard,
-    tournament_keyboard,
-    yes_no_keyboard,
-)
+from bot.keyboards.creator_keyboard import (get_add_bot_keyboard,
+                                            join_tournament_keyboard,
+                                            tournament_keyboard,
+                                            yes_no_keyboard)
 from bot.states.states import FSMFillParametres
 from bot.utils.utils_tournament import create_tournament_db
-from bot.utils.utils_user_player import get_or_create_player, get_or_create_user
+from bot.utils.utils_user_player import (get_or_create_player,
+                                         get_or_create_user)
 
 START_PHRASE = "Этот бот для создания турниров прогнозов"
 START_TOURNAMENT_PHRASE = "Вы начали создание турнира."
@@ -108,14 +107,14 @@ async def fill_best_assistant(callback_query: CallbackQuery, state: FSMContext):
     await callback_query.message.delete()
     data = await state.get_data()
     data_for_tournament = {
-        "name": data['name'],
+        "name": data["name"],
         "exact_score_points": data["exact_score_points"],
-        "results_points": data['results_points'],
+        "results_points": data["results_points"],
         "difference_points": data["difference_points"],
-        "winner": data['winner'],
-        "best_striker": data['best_striker'],
-        "best_assistant": data['best_assistant'],
-        "user_id": data["user_id"]
+        "winner": data["winner"],
+        "best_striker": data["best_striker"],
+        "best_assistant": data["best_assistant"],
+        "user_id": data["user_id"],
     }
     tournament = await create_tournament_db(data_for_tournament)
     summary = (
