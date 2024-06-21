@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timedelta
 
-from aiogram import Bot, F, Router
+from aiogram import F, Router
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
@@ -24,7 +24,7 @@ from bot.utils.random_distribution import (get_group_history,
                                            random_distribution,
                                            show_distribution)
 from bot.utils.utils_match import (create_match, create_match_prediction,
-                                   get_match_by_id, get_match_by_teams,
+                                   get_match_by_teams,
                                    update_match_prediction_for_player,
                                    update_match_results, validate_prediction,
                                    validate_tour_date)
@@ -43,7 +43,7 @@ router = Router()
 async def create_tournament_handler(callback_query: CallbackQuery, state: FSMContext):
     await callback_query.message.delete()
     user: User = await get_or_create_user(callback_query)
-    await state.update_data(user=user)
+    await state.update_data(user=user.id)
     await state.set_state(TournamentMenu.tournament_menu)
     tournaments = get_all_tournaments(user)
     if not tournaments:
