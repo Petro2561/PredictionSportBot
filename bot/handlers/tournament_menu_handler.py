@@ -43,7 +43,7 @@ router = Router()
 async def create_tournament_handler(callback_query: CallbackQuery, state: FSMContext):
     await callback_query.message.delete()
     user: User = await get_or_create_user(callback_query)
-    await state.update_data(user=user.id)
+    await state.update_data(user=user)
     await state.set_state(TournamentMenu.tournament_menu)
     tournaments = get_all_tournaments(user)
     if not tournaments:
