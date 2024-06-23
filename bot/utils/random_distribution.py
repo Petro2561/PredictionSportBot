@@ -67,6 +67,7 @@ async def create_group_history(groups: List[list], tournament: Tournament):
     data = {"group_distribution": group_distribution, "tournament_id": tournament.id}
     async for session in get_async_session():
         group_history = await crud_group_history.create(data, session)
+        await session.commit()
         return group_history
 
 
@@ -90,4 +91,5 @@ async def get_group_history(tournament):
         group_history = await crud_group_history.get_last_group_history(
             tournament.id, session
         )
+        await session.commit()
         return group_history

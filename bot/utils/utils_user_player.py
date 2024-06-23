@@ -1,8 +1,12 @@
 import logging
+from typing import List
 
+from bot.utils.utils_tournament import get_tournament
 from db.crud.player import crud_player
 from db.crud.user import crud_user
 from db.db import get_async_session
+from db.models import Tournament
+from sqlalchemy.orm import object_session
 
 
 async def get_or_create_user(callback_query):
@@ -48,15 +52,16 @@ async def get_or_create_player(data):
                 player, ["user", "match_predictions", "tournament_predictions"]
             )
             logging.info(f"Добавлен новый игрок {player.user.username}")
+            await session.commit()
             return player
         except Exception:
             logging.error("Не удалось добавить пользователя в базу", exc_info=True)
 
 
-async def eleminate_player(tournament, users_to_eliminate):
+async def eleminate_player(tournament: Tournament, users_to_eliminate: List[str]):
     async for session in get_async_session():
         for player in tournament.players:
             if player.user.username in users_to_eliminate:
                 player.is_eliminated = True
-                session.add(player)
+                await session.merge(player)
         await session.commit()
