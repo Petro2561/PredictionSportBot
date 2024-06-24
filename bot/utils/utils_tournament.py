@@ -18,20 +18,8 @@ async def create_tournament_db(data: dict) -> Tournament:
 
 async def get_tournament(id: int) -> Tournament:
     async for session in get_async_session():
-        result = await session.execute(
-            select(Tournament)
-            .options(
-                joinedload(Tournament.user),
-                joinedload(Tournament.players).joinedload(Player.user),
-                joinedload(Tournament.players).joinedload(
-                    Player.tournament_predictions
-                ),
-                joinedload(Tournament.current_tour),
-                joinedload(Tournament.matches).joinedload(Match.tour),
-            )
-            .filter(Tournament.id == id)
-        )
-        return result.scalars().first()
+        tournament = await crud_tournament.get_tournament(id, session)
+        return tournament
 
 
 def get_all_tournaments(user: User) -> Tournament:
@@ -74,7 +62,7 @@ async def set_current_tour(tour, tournament):
 
 
 async def create_tour_for_tournament(data, tour_date):
-    tournament = data["tournament"]
+    tournament = await get_tournament(data["tournament_id"])
     if tournament.current_tour_id:
         tour = await get_tour(tournament)
         data = {

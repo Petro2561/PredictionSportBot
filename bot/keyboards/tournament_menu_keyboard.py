@@ -44,10 +44,11 @@ async def generate_link(tournament):
         return f"https://d1sney.github.io/WebAppPrediction/prediction-match?matches=[{teams}]"
 
 
-async def keyboard_menu(user, tournament):
+async def keyboard_menu(user_id, tournament_id):
     kb_builder = ReplyKeyboardBuilder()
     button_players = KeyboardButton(text="Посмотреть список участников")
     button_table = KeyboardButton(text="Посмотреть таблицу")
+    tournament = await get_tournament(tournament_id)
     if tournament.current_tour_id:
         date_validation = await validate_tour_date(tournament)
         if date_validation:
@@ -58,12 +59,11 @@ async def keyboard_menu(user, tournament):
         else:
             button_make_prediction = KeyboardButton(text="Сделать прогноз")
         button_show_predictions = KeyboardButton(text="Посмотреть прогнозы игроков")
-        kb_builder.row(button_players, button_table, width=2)
         kb_builder.row(button_show_predictions, button_make_prediction, width=2)
     button_text = KeyboardButton(text="Сделать прогноз через текст")
-    kb_builder.row(button_text)
+    kb_builder.row(button_players, button_table, button_text, width=2)    
 
-    if user.id == tournament.user.id:
+    if user_id == tournament.user.id:
         button_set_null = KeyboardButton(text="Обнулить очки игрокам")
         button_set_matches = KeyboardButton(text="Установить матчи")
         button_set_matches_result = KeyboardButton(text="Проставить результаты матчей")
