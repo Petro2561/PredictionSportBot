@@ -14,8 +14,8 @@ async def create_match(data, first_team, second_team):
         data_match = {
             "first_team": first_team,
             "second_team": second_team,
-            "tournament_id": data["tournament"].id,
-            "tour_id": data["tour"].id,
+            "tournament_id": data["tournament_id"],
+            "tour_id": data["tour_id"],
         }
         match = await crud_match.create(data_match, session)
         session.add(match)
@@ -62,12 +62,14 @@ async def update_match_prediction_for_player(
                 "second_team_score": second_team_score,
             }
             match_prediction = await crud_match_prediction.create(data, session)
+            await session.commit()
             return match_prediction
 
 
 async def get_match_by_id(match_id) -> Match:
     async for session in get_async_session():
         match = await crud_match.get_match_by_id(match_id, session)
+        await session.commit()
         return match
 
 

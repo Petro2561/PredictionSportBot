@@ -6,10 +6,10 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
 from bot.bot import main_bot
+from bot.scheduler.jokes import JOKES
 from bot.utils.common import get_tour
-from db.crud import crud_tournament
 from db.db import get_async_session
-from db.models import MatchPrediction, Player, Tour, Tournament
+from db.models import Player, Tour, Tournament
 
 scheduler = AsyncIOScheduler()
 
@@ -33,10 +33,16 @@ async def send_reminders():
                 if current_time >= reminder_time:
                     for player in players:
                         await session.refresh(player, ["user"])
-                        await main_bot.send_message(
-                            chat_id=player.user.telegram_id,
-                            text=f"Напоминание: сегодня дедлайн по прогнозам!",
-                        )
+                        if player.user.username in JOKES and player.is_eleminated == False:
+                            await main_bot.send_message(
+                                chat_id=player.user.telegram_id,
+                                text=JOKES[player.user.username],
+                            )
+                        else:
+                            await main_bot.send_message(
+                                chat_id=player.user.telegram_id,
+                                text=f"Напоминание: сегодня дедлайн по прогнозам!",
+                            )
 
 
 scheduler.add_job(send_reminders, CronTrigger(hour="*/2"))
