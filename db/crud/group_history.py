@@ -10,7 +10,7 @@ class CRUDGroupHistory(CRUDBase):
         db_obj = await session.execute(
             select(self.model)
             .where(self.model.tournament_id == tournament_id)
-            .order_by(self.model.timestamp.desc())
+            .order_by(self.model.id.desc())
         )
         return db_obj.scalars().first()
 
