@@ -33,7 +33,7 @@ async def send_reminders():
                 if current_time >= reminder_time:
                     for player in players:
                         await session.refresh(player, ["user"])
-                        if player.user.username in JOKES and player.is_eleminated == False:
+                        if player.user.username in JOKES and player.is_eliminated == False:
                             await main_bot.send_message(
                                 chat_id=player.user.telegram_id,
                                 text=JOKES[player.user.username],
