@@ -38,7 +38,7 @@ async def send_reminders():
                                 chat_id=player.user.telegram_id,
                                 text=JOKES[player.user.username],
                             )
-                        else:
+                        elif player.is_eliminated == False:
                             await main_bot.send_message(
                                 chat_id=player.user.telegram_id,
                                 text=f"Напоминание: сегодня дедлайн по прогнозам!",
