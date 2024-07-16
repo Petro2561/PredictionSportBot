@@ -19,5 +19,3 @@
 - TelegramWebApp
 - APSheduler
 - Sqllite
-
-Бот можно найти работающим по адресу https://t.me/Prediction_sport_competition_bot
