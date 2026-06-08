@@ -24,7 +24,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("username", sa.String(), nullable=True),
         sa.Column("name", sa.String(), nullable=True),
-        sa.Column("telegram_id", sa.Integer(), nullable=True),
+        sa.Column("telegram_id", sa.BigInteger(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("telegram_id"),
         sa.UniqueConstraint("username"),
@@ -41,7 +41,7 @@ def upgrade() -> None:
         sa.Column("best_striker", sa.Boolean(), nullable=True),
         sa.Column("best_assistant", sa.Boolean(), nullable=True),
         sa.Column("user_id", sa.Integer(), nullable=False),
-        sa.Column("telegram_group_id", sa.Integer(), nullable=True),
+        sa.Column("telegram_group_id", sa.BigInteger(), nullable=True),
         sa.Column("current_tour_id", sa.Integer(), nullable=True),
         sa.ForeignKeyConstraint(
             ["user_id"],

@@ -8,7 +8,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import (CallbackQuery, InlineKeyboardButton,
                            InlineKeyboardMarkup, Message)
 
-from bot.errors.error import PredictionValidationError
 from bot.filters.filters import PrivateChatFilter
 from bot.keyboards.callback_factory import (DrawGroupsCallbackFactory,
                                             MenuCallbackFactory,
@@ -16,7 +15,6 @@ from bot.keyboards.callback_factory import (DrawGroupsCallbackFactory,
 from bot.keyboards.tournament_menu_keyboard import (create_tournament_keyboard,
                                                     draw_groups_count_keyboard,
                                                     generate_link,
-                                                    inline_keyboard_next,
                                                     keyboard_menu,
                                                     prediction_form_keyboard)
 from bot.config import is_bot_admin, load_config
@@ -38,18 +36,12 @@ from bot.utils.random_distribution import (get_group_history,
                                            random_distribution,
                                            show_distribution)
 from bot.utils.match_groups import (
-    get_half_boundary,
-    get_half_label,
     get_matches_for_player,
     get_total_groups,
-    get_tour_matches_sorted,
     splits_matches_by_groups,
-    validate_player_match_access,
 )
 from bot.utils.points_results import recalculate_tournament_points
-from bot.utils.utils_match import (update_match_prediction_for_player,
-                                   validate_prediction,
-                                   validate_tour_date)
+from bot.utils.utils_match import validate_tour_date
 from bot.utils.utils_tournament import (eleminated_to_front,
                                         get_all_tournaments, get_tournament)
 from bot.utils.utils_user_player import (ensure_user_in_default_tournament,
@@ -581,123 +573,3 @@ async def no_group_prediction(callback_query: CallbackQuery, state: FSMContext):
         "Сначала проведите жеребьевку — от группы зависит, какие 12 матчей тура вы прогнозируете."
     )
 
-
-@router.callback_query(
-    MenuCallbackFactory.filter(F.action == "prediction_text"),
-    StateFilter(TournamentMenu.tournament_menu),
-)
-async def give_prediction_text(callback_query: CallbackQuery, state: FSMContext):
-    await callback_query.answer()
-    data = await state.get_data()
-    tournament = await get_tournament(data["tournament_id"])
-    player: Player = await get_or_create_player(
-        {"tournament_id": data["tournament_id"], "user_id": data["user_id"]}
-    )
-    if tournament.current_tour_id:
-        date_validation = await validate_tour_date(tournament)
-        if date_validation:
-            if splits_matches_by_groups(tournament) and not player.group:
-                await callback_query.message.answer(
-                    "Сначала проведите жеребьевку — от группы зависит, какие 12 матчей тура вы прогнозируете."
-                )
-                return
-            total_groups = await get_total_groups(tournament)
-            matches = get_matches_for_player(player, tournament, total_groups)
-            tour_matches = get_tour_matches_sorted(tournament)
-            boundary = get_half_boundary(len(tour_matches))
-            half_label = get_half_label(player, total_groups, boundary, tournament)
-            message_result = f"Ваши матчи ({half_label} из {len(tour_matches)}):"
-            await callback_query.message.answer(message_result)
-            for match in matches:
-                message_result = f"{match.id}.{match.first_team}-{match.second_team}"
-                await callback_query.message.answer(message_result)
-            await state.set_state(TournamentMenu.match_predictions)
-            await callback_query.message.answer(
-                "Пишите каждый матч отдельным сообщением. \nНапример, 1.Германия-Шотландия 1-0\nОбязательно с номером и точкой."
-            )
-            await callback_query.message.answer("Каждый матч отправляем отдельно.")
-        else:
-            await callback_query.message.answer(
-                "Тур уже начался или начинается раньше чем через час. вы не успели 😔, бот проставил вам 0-0 все матчи"
-            )
-    else:
-        await callback_query.message.answer("Матчи тура ещё не установлены")
-
-
-@router.message(
-    StateFilter(TournamentMenu.match_predictions),
-)
-async def receive_prediction(message: Message, state: FSMContext):
-    try:
-        prediction_text = message.text.strip()
-        match_info, score_str = prediction_text.split(" ")
-        match_id_str, teams_str = match_info.split(".")
-        match_id = int(match_id_str)
-        first_team, second_team = teams_str.split("-")
-        first_team_score, second_team_score = map(int, score_str.split("-"))
-        await validate_prediction(match_id, first_team, second_team)
-        data = await state.get_data()
-        player: Player = await get_or_create_player(
-            {"tournament_id": data["tournament_id"], "user_id": data["user_id"]}
-        )
-        tournament = await get_tournament(data["tournament_id"])
-        await validate_player_match_access(player, match_id, tournament)
-        await update_match_prediction_for_player(
-            match_id=match_id,
-            player_id=player.id,
-            first_team_score=first_team_score,
-            second_team_score=second_team_score,
-        )
-        await message.answer("Ваш прогноз сохранен.")
-        await message.answer(
-            "Нажмите далее, если закончили давать прогнозы",
-            reply_markup=inline_keyboard_next,
-        )
-    except ValueError:
-        await message.answer(
-            f"Скорее всего вы ошиблись при написании, пропробуйте еще. У вас получится. \nСо следующего тура будет удобнее!"
-        )
-    except PredictionValidationError as e:
-        await message.answer(e.message)
-
-
-@router.callback_query(
-    lambda callback: callback.data == "next",
-    StateFilter(TournamentMenu.match_predictions),
-)
-async def process_callback_next_button(
-    callback_query: CallbackQuery, state: FSMContext
-):
-    await callback_query.answer()
-    await state.set_state(TournamentMenu.tournament_menu)
-    data = await state.get_data()
-    await callback_query.message.delete()
-    player: Player = await get_or_create_player(
-        {"tournament_id": data["tournament_id"], "user_id": data["user_id"]}
-    )
-    tournament = await get_tournament(data["tournament_id"])
-    current_tour_id = tournament.current_tour_id
-    total_groups = await get_total_groups(tournament)
-    allowed_match_ids = {
-        match.id
-        for match in get_matches_for_player(player, tournament, total_groups)
-    }
-    message_predictions = "Ваши прогнозы:\n"
-    for prediction in player.match_predictions:
-        if (
-            prediction.match.tour.id == current_tour_id
-            and prediction.match_id in allowed_match_ids
-        ):
-            message_predictions += (
-                f"{prediction.match.first_team}-{prediction.match.second_team}"
-                f" {prediction.first_team_score}-{prediction.second_team_score}\n"
-            )
-
-    await callback_query.message.answer(
-        "Прогнозы на матчи тура успешно заполнены",
-        reply_markup=await keyboard_menu(tournament_id=tournament.id, user_id=data["user_id"])
-    )
-    await callback_query.message.answer(message_predictions)
-    await callback_query.message.answer(
-        f"Если хотите поменять прогнозы, просто начните заново и поменяйте нужный матч"
-    )

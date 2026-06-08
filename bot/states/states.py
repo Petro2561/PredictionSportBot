@@ -3,7 +3,6 @@ from aiogram.fsm.state import State, StatesGroup
 
 class TournamentMenu(StatesGroup):
     tournament_menu = State()
-    match_predictions = State()
     admin_draw_groups_count = State()
 
 

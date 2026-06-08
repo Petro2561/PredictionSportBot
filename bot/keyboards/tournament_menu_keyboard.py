@@ -20,10 +20,6 @@ from bot.utils.random_distribution import add_player_to_group
 from bot.utils.utils_user_player import get_or_create_player
 from db.models import Player, User
 
-button_next = InlineKeyboardButton(text="Далее", callback_data="next")
-inline_keyboard_next = InlineKeyboardMarkup(inline_keyboard=[[button_next]])
-
-
 def create_tournament_keyboard(user: User):
     tournaments = get_all_tournaments(user)
     if tournaments:
@@ -158,13 +154,8 @@ async def keyboard_menu(user_id, tournament_id, telegram_id: int | None = None):
         )
         kb_builder.row(button_show_predictions)
         kb_builder.row(button_make_prediction)
-    button_text = InlineKeyboardButton(
-        text="Сделать прогноз через текст",
-        callback_data=MenuCallbackFactory(action="prediction_text").pack(),
-    )
     kb_builder.row(button_players)
     kb_builder.row(button_table)
-    kb_builder.row(button_text)
     if telegram_id and is_bot_admin(telegram_id):
         kb_builder.row(
             InlineKeyboardButton(

@@ -1,7 +1,7 @@
 from datetime import datetime
 
-from sqlalchemy import (JSON, Boolean, Column, DateTime, ForeignKey, Integer,
-                        String, UniqueConstraint)
+from sqlalchemy import (JSON, BigInteger, Boolean, Column, DateTime, ForeignKey,
+                        Integer, String, UniqueConstraint)
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
@@ -50,7 +50,7 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String, unique=True)
     name = Column(String)
-    telegram_id = Column(Integer, unique=True)
+    telegram_id = Column(BigInteger, unique=True)
 
     players = relationship("Player", back_populates="user")
     tournaments = relationship("Tournament", back_populates="user")
@@ -68,7 +68,7 @@ class Tournament(Base):
     best_striker = Column(Boolean, nullable=True)
     best_assistant = Column(Boolean, nullable=True)
     user_id = Column(Integer, ForeignKey("user.id"), nullable=False)
-    telegram_group_id = Column(Integer, nullable=True)
+    telegram_group_id = Column(BigInteger, nullable=True)
     current_tour_id = Column(Integer, ForeignKey("tour.id"), nullable=True)
 
     user = relationship("User", back_populates="tournaments")
