@@ -2,18 +2,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from bot.utils.common import get_tour
-from db.crud.crud_base import CRUDBase
 from db.crud.tour import crud_tour
 from db.crud.tournament import crud_tournament
 from db.db import get_async_session
 from db.models import Match, Player, Tournament, TournamentPrediction, User
-
-
-async def create_tournament_db(data: dict) -> Tournament:
-    tournament_crud = CRUDBase(Tournament)
-    async for session in get_async_session():
-        tournament = await tournament_crud.create(data, session)
-        return tournament
 
 
 async def get_tournament(id: int) -> Tournament:
@@ -69,10 +61,16 @@ async def create_tour_for_tournament(data, tour_date):
             "number": tour.number + 1,
             "tournament_id": tournament.id,
             "next_deadline": tour_date,
+            "split_matches_by_groups": True,
         }
         tour = await create_tour_in_db(data)
     else:
-        data = {"number": 1, "tournament_id": tournament.id, "next_deadline": tour_date}
+        data = {
+            "number": 1,
+            "tournament_id": tournament.id,
+            "next_deadline": tour_date,
+            "split_matches_by_groups": True,
+        }
         tour = await create_tour_in_db(data)
     await set_current_tour(tour, tournament)
     return tour

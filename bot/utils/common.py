@@ -2,6 +2,7 @@ from aiogram import Bot
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from bot.utils.match_groups import get_matches_for_player, get_total_groups
 from db.crud.tour import crud_tour
 from db.db import get_async_session
 from db.models import Match, MatchPrediction, Player, Tournament
@@ -16,14 +17,25 @@ async def get_predictions(player: Player):
                 selectinload(Player.match_predictions)
                 .selectinload(MatchPrediction.match)
                 .selectinload(Match.tour),
-                selectinload(Player.tournament),
+                selectinload(Player.tournament).selectinload(Tournament.current_tour),
+                selectinload(Player.tournament).selectinload(Tournament.matches),
             )
             .where(Player.id == player.id, Player.is_eliminated == False)
         )
         player = player_with_predictions.scalars().first()
         if player:
+            total_groups = await get_total_groups(player.tournament)
+            allowed_match_ids = {
+                match.id
+                for match in get_matches_for_player(
+                    player, player.tournament, total_groups
+                )
+            }
             for prediction in player.match_predictions:
-                if prediction.match.tour.id == player.tournament.current_tour_id:
+                if (
+                    prediction.match.tour.id == player.tournament.current_tour_id
+                    and prediction.match_id in allowed_match_ids
+                ):
                     result_message += f"{(prediction.match.first_team)} - {prediction.match.second_team} {prediction.first_team_score}-{prediction.second_team_score} Очки: {prediction.points} \n"
         return result_message
 

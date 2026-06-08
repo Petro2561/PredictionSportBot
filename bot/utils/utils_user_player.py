@@ -1,12 +1,14 @@
 import logging
 from typing import List
 
+from bot.config import load_config
+from bot.utils.random_distribution import add_player_to_group
 from bot.utils.utils_tournament import get_tournament
 from db.crud.player import crud_player
 from db.crud.user import crud_user
 from db.db import get_async_session
-from db.models import Tournament
-from sqlalchemy.orm import object_session
+from db.models import Player, Tournament, User
+from sqlalchemy.orm import joinedload, object_session
 
 
 async def get_or_create_user(callback_query):
@@ -56,6 +58,48 @@ async def get_or_create_player(data):
             return player
         except Exception:
             logging.error("Не удалось добавить пользователя в базу", exc_info=True)
+
+
+async def refresh_user(user_id: int) -> User | None:
+    from sqlalchemy import select
+
+    async for session in get_async_session():
+        result = await session.execute(
+            select(User)
+            .where(User.id == user_id)
+            .options(
+                joinedload(User.players).joinedload(Player.tournament),
+                joinedload(User.tournaments),
+            )
+        )
+        return result.scalars().first()
+
+
+async def ensure_user_in_default_tournament(user: User) -> bool:
+    config = load_config()
+    tournament = await get_tournament(config.default_tournament_id)
+    if not tournament:
+        logging.warning("Турнир id=%s не найден", config.default_tournament_id)
+        return False
+
+    async for session in get_async_session():
+        existing_player = await crud_player.get_by_user_id(
+            user.id, tournament.id, session
+        )
+        is_new = existing_player is None
+
+    player = await get_or_create_player(
+        {"user_id": user.id, "tournament_id": tournament.id}
+    )
+    if not player:
+        return False
+
+    from bot.utils.match_groups import splits_matches_by_groups
+
+    if splits_matches_by_groups(tournament) and not player.group:
+        await add_player_to_group(player, tournament)
+
+    return is_new
 
 
 async def eleminate_player(tournament: Tournament, users_to_eliminate: List[str]):

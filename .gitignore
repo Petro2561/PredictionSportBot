@@ -153,6 +153,12 @@ dmypy.json
 cython_debug/
 
 sqlite.db
+credentials/
+!credentials/.gitkeep
+*-service-account*.json
+n8n-*.json
+bin/ngrok
+bin/ngrok.zip
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can

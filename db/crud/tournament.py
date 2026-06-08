@@ -1,6 +1,6 @@
 from sqlalchemy import select
 from db.crud.crud_base import CRUDBase
-from db.models import Match, Player, Tournament
+from db.models import Match, MatchPrediction, Player, Tournament
 from sqlalchemy.orm import joinedload
 
 
@@ -14,11 +14,14 @@ class CRUDTournament(CRUDBase):
                 joinedload(self.model.players).joinedload(
                     Player.tournament_predictions
                 ),
+                joinedload(self.model.players)
+                .joinedload(Player.match_predictions)
+                .joinedload(MatchPrediction.match),
                 joinedload(self.model.current_tour),
                 joinedload(self.model.matches).joinedload(Match.tour),
             )
         )
-        return result.scalars().first()
+        return result.scalars().unique().first()
 
 
 crud_tournament = CRUDTournament(Tournament)

@@ -93,3 +93,34 @@ async def get_group_history(tournament):
         )
         await session.commit()
         return group_history
+
+
+async def add_player_to_group(player: Player, tournament: Tournament) -> str:
+    group_history = await get_group_history(tournament)
+    async for session in get_async_session():
+        db_player = await session.get(Player, player.id)
+        if not db_player or db_player.group:
+            return db_player.group if db_player else ""
+
+        if not group_history:
+            group_distribution = {"Group 1": [db_player.id], "Group 2": []}
+            group_history = GroupHistory(
+                group_distribution=group_distribution,
+                tournament_id=tournament.id,
+            )
+            session.add(group_history)
+            db_player.group = "Group 1"
+        else:
+            db_group_history = await crud_group_history.get_last_group_history(
+                tournament.id, session
+            )
+            distribution = dict(db_group_history.group_distribution)
+            group_name = min(distribution, key=lambda name: len(distribution[name]))
+            distribution[group_name] = [*distribution[group_name], db_player.id]
+            db_group_history.group_distribution = distribution
+            db_player.group = group_name
+            session.add(db_group_history)
+
+        session.add(db_player)
+        await session.commit()
+        return db_player.group

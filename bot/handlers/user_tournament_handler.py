@@ -4,11 +4,16 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from bot.filters.filters import PrivateChatFilter
-from bot.keyboards.tournament_menu_keyboard import keyboard_menu
-from bot.states.states import PredictionState, TournamentMenu
-from bot.utils.utils_tournament import get_tournament, save_predictions
-from bot.utils.utils_user_player import (get_or_create_player,
-                                         get_or_create_user)
+from bot.states.states import PredictionState
+from bot.utils.tournament_predictions import (
+    ensure_tournament_prediction_flags,
+    finish_or_continue_predictions,
+    get_missing_prediction_fields,
+    save_tournament_prediction,
+    start_next_prediction_prompt,
+)
+from bot.utils.utils_tournament import get_tournament
+from bot.utils.utils_user_player import get_or_create_player, get_or_create_user
 from db.models import Player, User
 
 ADDING_TO_TOURNAMENT = "Вы успешно добавлены в турнир"
@@ -20,87 +25,50 @@ router = Router()
 @router.message(CommandStart(deep_link=True), PrivateChatFilter())
 async def handler(message: Message, command: CommandObject, state: FSMContext):
     user: User = await get_or_create_user(message)
-    data_for_player = {"user_id": user.id, "tournament_id": int(command.args)}
-    player: Player = await get_or_create_player(data_for_player)
+    tournament_id = int(command.args)
+    await ensure_tournament_prediction_flags(tournament_id)
+    player: Player = await get_or_create_player(
+        {"user_id": user.id, "tournament_id": tournament_id}
+    )
     await message.answer(ADDING_TO_TOURNAMENT)
 
-    tournament = await get_tournament(int(command.args))
-    await state.update_data(tournament_id=tournament.id)
-    await state.update_data(user_id=user.id)
-    await state.update_data(player_id=player.id)
+    tournament = await get_tournament(tournament_id)
+    await state.update_data(
+        tournament_id=tournament.id, user_id=user.id, player_id=player.id
+    )
 
-    if not player.tournament_predictions or not [
-        tournament_prediction
-        for tournament_prediction in player.tournament_predictions
-        if tournament_prediction.tournament_id == tournament.id
-    ]:
-        if tournament.winner:
-            await message.answer("Угадайте победителя турнира")
-            await state.set_state(PredictionState.waiting_for_winner)
-        elif tournament.best_striker:
-            await message.answer("Угадайте лучшего бомбардира турнира")
-            await state.set_state(PredictionState.waiting_for_best_striker)
-        elif tournament.best_assistant:
-            await message.answer("Угадайте лучшего ассистента турнира")
-            await state.set_state(PredictionState.waiting_for_best_assistant)
-
-
-@router.message(StateFilter(PredictionState.waiting_for_winner))
-async def process_winner_prediction(message: Message, state: FSMContext):
-    winner_prediction = message.text
-    await state.update_data(winner=winner_prediction)
-    data = await state.get_data()
-    tournament = await get_tournament(data["tournament_id"])
-    if tournament.best_striker:
-        await message.answer("Угадайте лучшего бомбардира турнира")
-        await state.set_state(PredictionState.waiting_for_best_striker)
-    elif tournament.best_assistant:
-        await message.answer("Угадайте лучшего ассистента турнира")
-        await state.set_state(PredictionState.waiting_for_best_assistant)
-    else:
-        await save_predictions(state)
-        await state.set_state(TournamentMenu.tournament_menu)
-        await message.answer(
-            "Вы в главном меню",
-            reply_markup=await keyboard_menu(tournament_id=data["tournament_id"], user_id=data["user_id"])
-        )
+    missing = get_missing_prediction_fields(player, tournament)
+    if missing:
+        await start_next_prediction_prompt(message, state, missing[0])
 
 
 @router.message(StateFilter(PredictionState.waiting_for_best_striker))
 async def process_best_striker_prediction(message: Message, state: FSMContext):
-    best_striker_prediction = message.text
-    await state.update_data(best_striker=best_striker_prediction)
-
     data = await state.get_data()
+    await save_tournament_prediction(
+        data["tournament_id"],
+        data["player_id"],
+        best_striker=message.text.strip(),
+    )
     tournament = await get_tournament(data["tournament_id"])
-
-    if tournament.best_assistant:
-        await message.answer("Угадайте лучшего ассистента турнира")
-        await state.set_state(PredictionState.waiting_for_best_assistant)
-    else:
-        await save_predictions(state)
-        await state.set_state(TournamentMenu.tournament_menu)
-        await message.answer(
-            "Вы в главном меню",
-            reply_markup=await keyboard_menu(tournament_id=data["tournament_id"], user_id=data["user_id"])
-        )
+    player = await get_or_create_player(
+        {"tournament_id": data["tournament_id"], "user_id": data["user_id"]}
+    )
+    await finish_or_continue_predictions(message, state, tournament, player)
 
 
 @router.message(StateFilter(PredictionState.waiting_for_best_assistant))
 async def process_best_assistant_prediction(message: Message, state: FSMContext):
-    best_assistant_prediction = message.text
-    await state.update_data(best_assistant=best_assistant_prediction)
     data = await state.get_data()
-    prediction_data = {
-        "tournament_id": data["tournament_id"],
-        "player_id": data["player_id"],
-        "winner": data.get("winner"),
-        "best_striker": data.get("best_striker"),
-        "best_assistant": data.get("best_assistant"),
-    }
-    await save_predictions(prediction_data)
-    await state.set_state(TournamentMenu.tournament_menu)
-    await message.answer(
-        "Ура! Вы в турнире!",
-        reply_markup=await keyboard_menu(tournament_id=data["tournament_id"], user_id=data["user_id"])
+    await save_tournament_prediction(
+        data["tournament_id"],
+        data["player_id"],
+        best_assistant=message.text.strip(),
+    )
+    tournament = await get_tournament(data["tournament_id"])
+    player = await get_or_create_player(
+        {"tournament_id": data["tournament_id"], "user_id": data["user_id"]}
+    )
+    await finish_or_continue_predictions(
+        message, state, tournament, player, success_text="Ура! Вы в турнире!"
     )

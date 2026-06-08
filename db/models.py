@@ -28,6 +28,12 @@ class Player(Base):
         UniqueConstraint("user_id", "tournament_id", name="_user_tournament_uc"),
     )
 
+    def __str__(self) -> str:
+        user = self.__dict__.get("user")
+        if user is not None:
+            return user.name or user.username or f"Игрок #{self.id}"
+        return f"Игрок #{self.id}"
+
 
 class GroupHistory(Base):
     __tablename__ = "group_history"
@@ -87,6 +93,7 @@ class Tour(Base):
     number = Column(Integer, nullable=False)
     tournament_id = Column(Integer, ForeignKey("tournament.id"))
     next_deadline = Column(DateTime, nullable=False)
+    split_matches_by_groups = Column(Boolean, nullable=False, default=True)
 
     tournament = relationship(
         "Tournament", back_populates="tours", foreign_keys=[tournament_id]
@@ -145,6 +152,9 @@ class TournamentPrediction(Base):
     __table_args__ = (
         UniqueConstraint("tournament_id", "player_id", name="_tournament_player_uc"),
     )
+
+    def __str__(self) -> str:
+        return f"Прогноз #{self.id}"
 
 
 class ResetPoints(Base):

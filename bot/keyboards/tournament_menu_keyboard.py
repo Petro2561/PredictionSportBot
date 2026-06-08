@@ -1,12 +1,26 @@
-from aiogram.types import (InlineKeyboardButton, InlineKeyboardMarkup,
-                           KeyboardButton)
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.types.web_app_info import WebAppInfo
-from aiogram.utils.keyboard import ReplyKeyboardBuilder, ReplyKeyboardMarkup
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from bot.keyboards.callback_factory import TournamentCallbackFactory
+from bot.config import is_bot_admin, load_config
+from bot.utils.ngrok_sync import resolve_webapp_url
+from bot.utils.prediction_submit import build_prediction_form_matches
+from bot.webapp_sessions import create_prediction_session
+from bot.keyboards.callback_factory import (
+    DrawGroupsCallbackFactory,
+    MenuCallbackFactory,
+    TournamentCallbackFactory,
+)
+from bot.utils.match_groups import (
+    get_matches_for_player,
+    get_total_groups,
+    splits_matches_by_groups,
+)
 from bot.utils.utils_match import validate_tour_date
 from bot.utils.utils_tournament import get_all_tournaments, get_tournament
-from db.models import User
+from bot.utils.random_distribution import add_player_to_group
+from bot.utils.utils_user_player import get_or_create_player
+from db.models import Player, User
 
 button_next = InlineKeyboardButton(text="Далее", callback_data="next")
 inline_keyboard_next = InlineKeyboardMarkup(inline_keyboard=[[button_next]])
@@ -26,65 +40,152 @@ def create_tournament_keyboard(user: User):
     return None
 
 
-async def generate_link(tournament):
-    teams = ""
+async def generate_link(
+    tournament, player: Player, telegram_id: int | None = None
+) -> tuple[str, str | None]:
+    config = load_config()
     tournament = await get_tournament(tournament.id)
-    matches = [
-        match
-        for match in tournament.matches
-        if tournament.current_tour_id == match.tour.id
-    ]
-    matches.sort(key=lambda match: match.id)
-    if matches:
-        for match in matches:
-            teams += f"{match.first_team}-{match.second_team},"
-        teams = teams.rstrip(",")
-        return f"https://d1sney.github.io/WebAppPrediction/prediction-match?matches=[{teams}]"
-    else:
-        return f"https://d1sney.github.io/WebAppPrediction/prediction-match?matches=[{teams}]"
+    player = await get_or_create_player(
+        {"user_id": player.user_id, "tournament_id": tournament.id}
+    )
+    if not player:
+        return resolve_webapp_url(config.webapp.url, config.webapp.port) + "/prediction.html", (
+            "Не удалось загрузить профиль игрока."
+        )
+
+    if splits_matches_by_groups(tournament):
+        if not player.group:
+            await add_player_to_group(player, tournament)
+            player = await get_or_create_player(
+                {"user_id": player.user_id, "tournament_id": tournament.id}
+            )
+
+    total_groups = await get_total_groups(tournament)
+    matches = get_matches_for_player(player, tournament, total_groups)
+    base_url = resolve_webapp_url(config.webapp.url, config.webapp.port)
+    if not matches:
+        if splits_matches_by_groups(tournament):
+            return f"{base_url}/prediction.html", (
+                "Сначала проведите жеребьевку — от группы зависит, какие 12 матчей тура вы прогнозируете."
+            )
+        return f"{base_url}/prediction.html", "Матчи текущего тура ещё не добавлены."
+
+    if telegram_id is None and player.user:
+        telegram_id = player.user.telegram_id
+    session_id = create_prediction_session(
+        await build_prediction_form_matches(player, tournament),
+        telegram_id=telegram_id,
+        tournament_id=tournament.id,
+        user_id=player.user_id,
+    )
+    return f"{base_url}/p/{session_id}", None
 
 
-async def keyboard_menu(user_id, tournament_id):
-    kb_builder = ReplyKeyboardBuilder()
-    button_players = KeyboardButton(text="Посмотреть список участников")
-    button_table = KeyboardButton(text="Посмотреть таблицу")
+async def prediction_form_keyboard(
+    tournament, player: Player, form_url: str | None = None
+):
+    if form_url is None:
+        form_url, _ = await generate_link(tournament=tournament, player=player)
+    kb_builder = InlineKeyboardBuilder()
+    kb_builder.row(
+        InlineKeyboardButton(
+            text="Открыть форму (Web App)",
+            web_app=WebAppInfo(url=form_url),
+        )
+    )
+    kb_builder.row(
+        InlineKeyboardButton(
+            text="Открыть в браузере",
+            url=form_url,
+        )
+    )
+    return kb_builder.as_markup()
+
+
+def draw_groups_count_keyboard(max_groups: int) -> InlineKeyboardMarkup:
+    kb_builder = InlineKeyboardBuilder()
+    for count in (2, 3, 4, 6):
+        if count <= max_groups:
+            kb_builder.button(
+                text=str(count),
+                callback_data=DrawGroupsCallbackFactory(groups=count).pack(),
+            )
+    kb_builder.adjust(4)
+    kb_builder.row(
+        InlineKeyboardButton(
+            text="Другое число",
+            callback_data=MenuCallbackFactory(action="admin_draw_groups_custom").pack(),
+        )
+    )
+    kb_builder.row(
+        InlineKeyboardButton(
+            text="Отмена",
+            callback_data=MenuCallbackFactory(action="admin_draw_groups_cancel").pack(),
+        )
+    )
+    return kb_builder.as_markup()
+
+
+async def keyboard_menu(user_id, tournament_id, telegram_id: int | None = None):
+    kb_builder = InlineKeyboardBuilder()
+    button_players = InlineKeyboardButton(
+        text="Посмотреть список участников",
+        callback_data=MenuCallbackFactory(action="show_players").pack(),
+    )
+    button_table = InlineKeyboardButton(
+        text="Посмотреть таблицу",
+        callback_data=MenuCallbackFactory(action="show_table").pack(),
+    )
     tournament = await get_tournament(tournament_id)
+    player = next(
+        (p for p in tournament.players if p.user_id == user_id),
+        None,
+    )
+    if not player:
+        player = await get_or_create_player(
+            {"user_id": user_id, "tournament_id": tournament_id}
+        )
     if tournament.current_tour_id:
         date_validation = await validate_tour_date(tournament)
-        if date_validation:
-            button_make_prediction = KeyboardButton(
+        if not date_validation:
+            button_make_prediction = InlineKeyboardButton(
                 text="Сделать прогноз",
-                web_app=WebAppInfo(url=await generate_link(tournament=tournament)),
+                callback_data=MenuCallbackFactory(action="make_prediction_late").pack(),
+            )
+        elif splits_matches_by_groups(tournament) and not player.group:
+            button_make_prediction = InlineKeyboardButton(
+                text="Сделать прогноз",
+                callback_data=MenuCallbackFactory(action="no_group").pack(),
             )
         else:
-            button_make_prediction = KeyboardButton(text="Сделать прогноз")
-        button_show_predictions = KeyboardButton(text="Посмотреть прогнозы игроков")
-        kb_builder.row(button_show_predictions, button_make_prediction, width=2)
-    button_text = KeyboardButton(text="Сделать прогноз через текст")
-    kb_builder.row(button_players, button_table, button_text, width=2)    
-
-    if user_id == tournament.user.id:
-        button_set_null = KeyboardButton(text="Обнулить очки игрокам")
-        button_set_matches = KeyboardButton(text="Установить матчи")
-        button_set_matches_result = KeyboardButton(text="Проставить результаты матчей")
-        button_make_groups = KeyboardButton(text="Провести жеребьевку")
-        button_eliminate_plaayer = KeyboardButton(text="Убрать игрока из турнира")
-        kb_builder.row(button_set_null, button_set_matches, width=2)
-        kb_builder.row(
-            button_make_groups,
-            button_set_matches_result,
-            button_eliminate_plaayer,
-            width=2,
+            button_make_prediction = InlineKeyboardButton(
+                text="Сделать прогноз",
+                callback_data=MenuCallbackFactory(action="open_prediction_form").pack(),
+            )
+        button_show_predictions = InlineKeyboardButton(
+            text="Посмотреть прогнозы игроков",
+            callback_data=MenuCallbackFactory(action="show_predictions").pack(),
         )
-    keyboard = kb_builder.as_markup(resize_keyboard=True, one_time_keyboard=True)
-    return keyboard
-
-
-def webapp_keyboard():
-    kb_builder = ReplyKeyboardBuilder()
-    webapp_button = KeyboardButton(
-        text="Перейти к установке матчей",
-        web_app=WebAppInfo(url="https://d1sney.github.io/WebAppPrediction"),
+        kb_builder.row(button_show_predictions)
+        kb_builder.row(button_make_prediction)
+    button_text = InlineKeyboardButton(
+        text="Сделать прогноз через текст",
+        callback_data=MenuCallbackFactory(action="prediction_text").pack(),
     )
-    kb_builder.add(webapp_button)
-    return kb_builder.as_markup(resize_keyboard=True)
+    kb_builder.row(button_players)
+    kb_builder.row(button_table)
+    kb_builder.row(button_text)
+    if telegram_id and is_bot_admin(telegram_id):
+        kb_builder.row(
+            InlineKeyboardButton(
+                text="Провести жеребьёвку",
+                callback_data=MenuCallbackFactory(action="admin_draw_groups").pack(),
+            )
+        )
+        kb_builder.row(
+            InlineKeyboardButton(
+                text="Обновить Google таблицу",
+                callback_data=MenuCallbackFactory(action="admin_update_sheet").pack(),
+            )
+        )
+    return kb_builder.as_markup()

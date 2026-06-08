@@ -101,3 +101,8 @@ async def reset_points(tournament):
             player.points = 0
             session.add(player)
             await session.commit()
+
+
+async def recalculate_tournament_points(tournament: Tournament) -> None:
+    await calculate_prediction_results(tournament)
+    await player_points_calculation(tournament)

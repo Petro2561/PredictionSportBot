@@ -2,6 +2,12 @@ import select
 from datetime import datetime, timedelta
 
 from bot.errors.error import PredictionValidationError
+from bot.utils.match_groups import (
+    get_total_groups,
+    match_is_in_first_half,
+    player_predicts_first_half,
+    splits_matches_by_groups,
+)
 from db.crud.match import crud_match
 from db.crud.match_prediction import crud_match_prediction
 from db.crud.tour import crud_tour
@@ -26,8 +32,17 @@ async def create_match(data, first_team, second_team):
 async def create_match_prediction(
     match, tournament, first_team_score=0, second_team_score=0
 ):
+    total_groups = await get_total_groups(tournament)
+    is_first_half = match_is_in_first_half(match, tournament)
+
     async for session in get_async_session():
         for player in tournament.players:
+            if splits_matches_by_groups(tournament):
+                if not player.group:
+                    continue
+                predicts_first = player_predicts_first_half(player, total_groups)
+                if is_first_half != predicts_first:
+                    continue
             data_match = {
                 "first_team_score": first_team_score,
                 "second_team_score": second_team_score,
@@ -79,11 +94,14 @@ async def validate_prediction(match_id, first_team, second_team):
         raise PredictionValidationError
 
 
-async def validate_tour_date(tournament: Tournament):
+async def validate_tour_date(tournament: Tournament) -> bool:
+    if not tournament.current_tour_id:
+        return False
     async for session in get_async_session():
         tour: Tour = await crud_tour.get_tour_by_id(tournament.current_tour_id, session)
-        if tour.next_deadline - datetime.now() > timedelta(hours=1):
-            return True
+        if not tour:
+            return False
+        return tour.next_deadline - datetime.now() > timedelta(hours=1)
 
 
 async def update_match_results(match_id, first_team_score, second_team_score):
