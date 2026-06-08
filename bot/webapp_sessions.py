@@ -1,6 +1,11 @@
 import secrets
 import time
-from typing import NotRequired, TypedDict
+from typing import TypedDict
+
+try:
+    from typing import NotRequired
+except ImportError:
+    from typing_extensions import NotRequired
 
 
 SESSION_TTL_SECONDS = 3600

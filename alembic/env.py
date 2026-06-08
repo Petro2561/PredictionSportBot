@@ -8,7 +8,6 @@ from db.models import (Match, MatchPrediction, Player, Tournament,
                        TournamentPrediction, User)
 
 target_metadata = Base.metadata
-print(target_metadata.tables)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
