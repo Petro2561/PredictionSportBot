@@ -6,7 +6,16 @@ from sqlalchemy.orm import Session, joinedload
 from db.db import DATABASE_URL
 from db.models import Player, TournamentPrediction
 
-SYNC_DATABASE_URL = DATABASE_URL.replace("sqlite+aiosqlite", "sqlite")
+
+def _sync_database_url(url: str) -> str:
+    if url.startswith("sqlite+aiosqlite"):
+        return url.replace("sqlite+aiosqlite", "sqlite")
+    if url.startswith("postgresql+asyncpg"):
+        return url.replace("postgresql+asyncpg", "postgresql+psycopg2")
+    return url
+
+
+SYNC_DATABASE_URL = _sync_database_url(DATABASE_URL)
 
 
 @lru_cache(maxsize=1)
