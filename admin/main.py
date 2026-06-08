@@ -6,9 +6,10 @@ from sqladmin import widgets as sqladmin_widgets
 from sqlalchemy.ext.asyncio import create_async_engine
 from starlette.middleware.sessions import SessionMiddleware
 
-# WTForms 3.x требует validation_attrs у Input-виджетов; sqladmin BooleanInputWidget без него.
-if not getattr(sqladmin_widgets.BooleanInputWidget, "validation_attrs", None):
-    sqladmin_widgets.BooleanInputWidget.validation_attrs = ["required", "disabled"]
+# WTForms 3.x: в старых sqladmin у BooleanInputWidget не было validation_attrs.
+_boolean_widget = getattr(sqladmin_widgets, "BooleanInputWidget", None)
+if _boolean_widget and not getattr(_boolean_widget, "validation_attrs", None):
+    _boolean_widget.validation_attrs = ["required", "disabled"]
 
 from admin.helpers import get_player_label
 from bot.config import load_config
