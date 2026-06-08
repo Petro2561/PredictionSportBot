@@ -37,6 +37,7 @@ google-api-python-client==2.130.0
 google-auth==2.29.0
 google-auth-oauthlib==1.2.0
 fastapi==0.115.6
+itsdangerous==2.2.0
 sqladmin==0.20.1
 uvicorn[standard]==0.34.0
 redis==5.2.1
