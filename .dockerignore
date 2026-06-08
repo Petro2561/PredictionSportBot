@@ -1,0 +1,12 @@
+.git
+.gitignore
+venv
+__pycache__
+*.pyc
+.env
+postgres_data
+redis_data
+bin/ngrok
+bin/ngrok.zip
+.vscode
+*.db
