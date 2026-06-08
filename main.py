@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 
 from aiogram import Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -25,7 +26,10 @@ async def main():
     config = load_config()
     logger.info("Starting bot")
     await start_webapp_server(port=config.webapp.port)
-    redis = Redis(host='localhost')
+    redis = Redis(
+        host=os.getenv("REDIS_HOST", "localhost"),
+        port=int(os.getenv("REDIS_PORT", "6379")),
+    )
     storage = RedisStorage(redis=redis)
     dp = Dispatcher(storage=storage)
     dp.include_router(user_tournament_handler.router)

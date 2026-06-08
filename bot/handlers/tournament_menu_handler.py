@@ -1,4 +1,3 @@
-import json
 import logging
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
@@ -48,7 +47,6 @@ from bot.utils.match_groups import (
     validate_player_match_access,
 )
 from bot.utils.points_results import recalculate_tournament_points
-from bot.utils.prediction_submit import save_player_predictions
 from bot.utils.utils_match import (update_match_prediction_for_player,
                                    validate_prediction,
                                    validate_tour_date)
@@ -550,16 +548,13 @@ async def open_prediction_form(callback_query: CallbackQuery, state: FSMContext)
         return
 
     logger.info(
-        "WebApp URL для user_id=%s telegram_id=%s: %s",
+        "Form URL для user_id=%s telegram_id=%s: %s",
         data["user_id"],
         telegram_id,
         form_url,
     )
     await callback_query.message.answer(
-        f"Выберите способ открытия формы:\n\n"
-        f"• Web App — внутри Telegram (может не работать с ngrok free)\n"
-        f"• В браузере — надёжный вариант, откроется полная ссылка\n\n"
-        f"{form_url}",
+        f"Откройте форму на сайте и укажите счёт для каждого матча:\n\n{form_url}",
         reply_markup=await prediction_form_keyboard(tournament, player, form_url),
         disable_web_page_preview=True,
     )
@@ -584,27 +579,6 @@ async def no_group_prediction(callback_query: CallbackQuery, state: FSMContext):
     await callback_query.answer()
     await callback_query.message.answer(
         "Сначала проведите жеребьевку — от группы зависит, какие 12 матчей тура вы прогнозируете."
-    )
-
-
-@router.message(
-    lambda message: message.web_app_data, StateFilter(TournamentMenu.tournament_menu)
-)
-async def receive_prediction(web_app_message: Message, state: FSMContext):
-    data = await state.get_data()
-    try:
-        message_predictions = await save_player_predictions(
-            data["tournament_id"],
-            data["user_id"],
-            json.loads(web_app_message.web_app_data.data),
-        )
-    except ValueError as error:
-        await web_app_message.answer(str(error))
-        return
-
-    await web_app_message.answer(
-        message_predictions,
-        reply_markup=await keyboard_menu(tournament_id=data["tournament_id"], user_id=data["user_id"])
     )
 
 

@@ -1,9 +1,7 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from aiogram.types.web_app_info import WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.config import is_bot_admin, load_config
-from bot.utils.ngrok_sync import resolve_webapp_url
 from bot.utils.prediction_submit import build_prediction_form_matches
 from bot.webapp_sessions import create_prediction_session
 from bot.keyboards.callback_factory import (
@@ -48,10 +46,9 @@ async def generate_link(
     player = await get_or_create_player(
         {"user_id": player.user_id, "tournament_id": tournament.id}
     )
+    base_url = config.webapp.url.rstrip("/")
     if not player:
-        return resolve_webapp_url(config.webapp.url, config.webapp.port) + "/prediction.html", (
-            "Не удалось загрузить профиль игрока."
-        )
+        return f"{base_url}/prediction.html", "Не удалось загрузить профиль игрока."
 
     if splits_matches_by_groups(tournament):
         if not player.group:
@@ -62,7 +59,6 @@ async def generate_link(
 
     total_groups = await get_total_groups(tournament)
     matches = get_matches_for_player(player, tournament, total_groups)
-    base_url = resolve_webapp_url(config.webapp.url, config.webapp.port)
     if not matches:
         if splits_matches_by_groups(tournament):
             return f"{base_url}/prediction.html", (
@@ -89,13 +85,7 @@ async def prediction_form_keyboard(
     kb_builder = InlineKeyboardBuilder()
     kb_builder.row(
         InlineKeyboardButton(
-            text="Открыть форму (Web App)",
-            web_app=WebAppInfo(url=form_url),
-        )
-    )
-    kb_builder.row(
-        InlineKeyboardButton(
-            text="Открыть в браузере",
+            text="Заполнить прогноз на сайте",
             url=form_url,
         )
     )

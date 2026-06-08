@@ -26,8 +26,8 @@ def _render_matches_html(matches: list[dict]) -> str:
     if not matches:
         return (
             '<div class="empty-state">Матчи для прогноза не найдены.<br><br>'
-            "Откройте форму через бота: /start → «Сделать прогноз» → «Открыть в браузере».<br>"
-            "Не заходите на главную страницу ngrok вручную — нужна полная ссылка вида /p/...</div>"
+            "Откройте форму через бота: /start → «Сделать прогноз».<br>"
+            "Нужна полная ссылка вида /p/...</div>"
         )
 
     cards: list[str] = []
@@ -63,10 +63,6 @@ def _build_prediction_html(session_id: str, session: dict) -> str:
     content = content.replace(
         '<link rel="stylesheet" href="/css/form.css" />',
         f"<style>{_read_webapp_asset('css/form.css')}</style>",
-    )
-    content = content.replace(
-        '<script src="https://telegram.org/js/telegram-web-app.js"></script>',
-        '<script async src="https://telegram.org/js/telegram-web-app.js"></script>',
     )
     content = content.replace('<script src="/js/prediction.js"></script>', "")
     content = content.replace(

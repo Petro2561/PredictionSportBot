@@ -1,9 +1,3 @@
-const tg = window.Telegram?.WebApp;
-
-function isTelegramWebApp() {
-  return Boolean(tg?.initData);
-}
-
 function getSessionId() {
   const params = new URLSearchParams(window.location.search);
   return window.__PREDICTION_SID__ || params.get("sid") || "";
@@ -46,12 +40,6 @@ async function loadMatches() {
   const sessionId = getSessionId();
   if (sessionId) {
     const matches = await fetchMatches(`sid=${encodeURIComponent(sessionId)}`);
-    if (matches) return matches;
-  }
-
-  const telegramUserId = tg?.initDataUnsafe?.user?.id;
-  if (telegramUserId) {
-    const matches = await fetchMatches(`uid=${encodeURIComponent(telegramUserId)}`);
     if (matches) return matches;
   }
 
@@ -136,8 +124,8 @@ function renderForm(matches) {
   if (!matches.length) {
     root.innerHTML =
       '<div class="empty-state">Матчи для прогноза не найдены.<br><br>' +
-      "Откройте форму через бота: /start → «Сделать прогноз» → «Открыть в браузере».<br>" +
-      "Не заходите на главную страницу ngrok вручную — нужна полная ссылка вида /p/...</div>";
+      "Откройте форму через бота: /start → «Сделать прогноз».<br>" +
+      "Нужна полная ссылка вида /p/...</div>";
     document.getElementById("submit-btn").disabled = true;
     return;
   }
@@ -191,7 +179,8 @@ function showStatus(message, isError = false) {
   status.classList.toggle("error", isError);
 }
 
-async function submitViaApi(predictions, submitBtn) {
+async function submitPredictions(predictions) {
+  const submitBtn = document.getElementById("submit-btn");
   const sessionId = getSessionId();
   if (!sessionId) {
     showStatus("Не найдена сессия формы. Откройте ссылку из бота заново.", true);
@@ -215,37 +204,15 @@ async function submitViaApi(predictions, submitBtn) {
     showStatus("Прогнозы сохранены. Подтверждение отправлено в Telegram-бот.");
     setSubmitState(submitBtn, true, "Сохранено");
   } catch (error) {
-    showStatus("Ошибка сети. Проверьте, что бот запущен.", true);
+    showStatus("Ошибка сети. Проверьте подключение к интернету.", true);
     setSubmitState(submitBtn, false, "Отправить");
   }
-}
-
-async function submitPredictions(predictions) {
-  const submitBtn = document.getElementById("submit-btn");
-
-  if (isTelegramWebApp() && typeof tg.sendData === "function") {
-    try {
-      tg.sendData(JSON.stringify(predictions));
-      tg.close();
-      return;
-    } catch (error) {
-      showStatus("Не удалось отправить через Telegram, пробую через API...", false);
-    }
-  }
-
-  await submitViaApi(predictions, submitBtn);
 }
 
 async function init() {
   const matchesFromPage = Array.isArray(window.__PREDICTION_MATCHES__)
     ? window.__PREDICTION_MATCHES__
     : null;
-
-  if (tg) {
-    tg.ready();
-    tg.expand();
-    document.body.style.backgroundColor = tg.themeParams.bg_color || "#f0f4f9";
-  }
 
   const matches = matchesFromPage ?? (await loadMatches());
   renderForm(matches);
