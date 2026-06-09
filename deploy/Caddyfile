@@ -1,5 +1,7 @@
 {
 	email {$ACME_EMAIL}
+	# Иначе Caddy редиректит /.well-known/acme-challenge/ на HTTPS до выдачи сертификата
+	auto_https disable_redirects
 	cert_issuer acme {
 		disable_tlsalpn_challenge
 	}
