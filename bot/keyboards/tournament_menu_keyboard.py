@@ -155,7 +155,7 @@ async def keyboard_menu(user_id, tournament_id, telegram_id: int | None = None):
         kb_builder.row(button_show_predictions)
         kb_builder.row(button_make_prediction)
     kb_builder.row(button_players)
-    kb_builder.row(button_table)
+    # kb_builder.row(button_table)
     if telegram_id and is_bot_admin(telegram_id):
         kb_builder.row(
             InlineKeyboardButton(
