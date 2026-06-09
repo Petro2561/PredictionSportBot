@@ -37,6 +37,17 @@ services:
     networks:
       - psb_net
 
+  web:
+    image: nginx:alpine
+    container_name: psb-web
+    restart: unless-stopped
+    # Порт 80: с мобильного интернета :8082 часто недоступен
+    network_mode: host
+    volumes:
+      - ./deploy/nginx/webapp.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - bot
+
   bot:
     build:
       context: .

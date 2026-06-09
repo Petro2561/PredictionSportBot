@@ -146,7 +146,13 @@ async def _prediction_page(request: web.Request) -> web.Response:
     session_id = request.match_info["sid"]
     session = get_prediction_session(session_id)
     if session is None:
-        raise web.HTTPNotFound(text="Сессия прогноза не найдена или истекла")
+        raise web.HTTPNotFound(
+            text=(
+                "Ссылка устарела или бот перезапускался.\n\n"
+                "Вернитесь в Telegram и нажмите «Сделать прогноз» ещё раз."
+            ),
+            content_type="text/plain; charset=utf-8",
+        )
     content = _build_prediction_html(session_id, session)
     logger.info(
         "Prediction page sid=%s user_id=%s matches=%s",

@@ -1,6 +1,9 @@
+import json
+import os
 import secrets
-import time
 from typing import TypedDict
+
+import redis
 
 try:
     from typing import NotRequired
@@ -9,6 +12,10 @@ except ImportError:
 
 
 SESSION_TTL_SECONDS = 3600
+_SESSION_PREFIX = "prediction_session:"
+_USER_PREFIX = "prediction_user:"
+
+_redis: redis.Redis | None = None
 
 
 class MatchPair(TypedDict):
@@ -25,8 +32,23 @@ class PredictionSession(TypedDict):
     user_id: NotRequired[int | None]
 
 
-_sessions: dict[str, tuple[float, PredictionSession]] = {}
-_user_sessions: dict[int, str] = {}
+def _get_redis() -> redis.Redis:
+    global _redis
+    if _redis is None:
+        _redis = redis.Redis(
+            host=os.getenv("REDIS_HOST", "localhost"),
+            port=int(os.getenv("REDIS_PORT", "6379")),
+            decode_responses=True,
+        )
+    return _redis
+
+
+def _session_key(session_id: str) -> str:
+    return f"{_SESSION_PREFIX}{session_id}"
+
+
+def _user_key(telegram_id: int) -> str:
+    return f"{_USER_PREFIX}{telegram_id}"
 
 
 def create_prediction_session(
@@ -35,50 +57,36 @@ def create_prediction_session(
     tournament_id: int | None = None,
     user_id: int | None = None,
 ) -> str:
-    _cleanup_expired()
     session_id = secrets.token_urlsafe(9)
-    _sessions[session_id] = (
-        time.time(),
-        {
-            "matches": matches,
-            "telegram_id": telegram_id,
-            "tournament_id": tournament_id,
-            "user_id": user_id,
-        },
+    payload: PredictionSession = {
+        "matches": matches,
+        "telegram_id": telegram_id,
+        "tournament_id": tournament_id,
+        "user_id": user_id,
+    }
+    client = _get_redis()
+    client.setex(
+        _session_key(session_id),
+        SESSION_TTL_SECONDS,
+        json.dumps(payload, ensure_ascii=False),
     )
     if telegram_id is not None:
-        _user_sessions[telegram_id] = session_id
+        client.setex(_user_key(telegram_id), SESSION_TTL_SECONDS, session_id)
     return session_id
 
 
 def get_prediction_session(session_id: str) -> PredictionSession | None:
-    _cleanup_expired()
-    entry = _sessions.get(session_id)
-    if not entry:
+    raw = _get_redis().get(_session_key(session_id))
+    if not raw:
         return None
-    return entry[1]
+    return json.loads(raw)
 
 
 def get_latest_session_for_user(telegram_id: int) -> list[MatchPair] | None:
-    _cleanup_expired()
-    session_id = _user_sessions.get(telegram_id)
+    session_id = _get_redis().get(_user_key(telegram_id))
     if not session_id:
         return None
     session = get_prediction_session(session_id)
     if not session:
         return None
     return session["matches"]
-
-
-def _cleanup_expired() -> None:
-    now = time.time()
-    expired = [
-        sid
-        for sid, (created_at, _) in _sessions.items()
-        if now - created_at > SESSION_TTL_SECONDS
-    ]
-    for sid in expired:
-        _sessions.pop(sid, None)
-    for telegram_id, session_id in list(_user_sessions.items()):
-        if session_id not in _sessions:
-            _user_sessions.pop(telegram_id, None)
