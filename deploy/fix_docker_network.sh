@@ -21,11 +21,10 @@ cd "$(dirname "$0")/.."
 docker compose down
 docker compose up -d
 
-echo "==> Проверка сети из контейнера бота"
+echo "==> Проверка сети (бот в network_mode: host)"
 sleep 3
 docker compose exec -T bot python -c "
-import socket, urllib.request
-socket.getaddrinfo('api.telegram.org', 443, socket.AF_INET)
-print(urllib.request.urlopen('https://api.telegram.org', timeout=15).status)
-print('OK: контейнер выходит в интернет')
+import urllib.request
+print('status:', urllib.request.urlopen('https://api.telegram.org', timeout=15).status)
 "
+docker compose logs bot --tail=5
