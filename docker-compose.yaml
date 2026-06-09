@@ -38,9 +38,21 @@ services:
       - psb_net
 
   web:
-    image: caddy:2-alpine
+    image: nginx:alpine
     container_name: psb-web
     restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./deploy/nginx/webapp.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - bot
+
+  # HTTPS через sslip.io — только если нужен; Caddy может подвисать на ACME
+  web-https:
+    image: caddy:2-alpine
+    container_name: psb-web-https
+    restart: unless-stopped
+    profiles: [https]
     network_mode: host
     env_file:
       - .env
@@ -52,6 +64,15 @@ services:
       - ./caddy_config:/config
     depends_on:
       - bot
+
+  # Бесплатный HTTPS для телефона: docker compose --profile tunnel up -d cloudflared
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: psb-tunnel
+    restart: unless-stopped
+    profiles: [tunnel]
+    network_mode: host
+    command: tunnel --no-autoupdate --url http://127.0.0.1:8082
 
   bot:
     build:
