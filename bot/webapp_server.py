@@ -146,12 +146,18 @@ async def _prediction_page(request: web.Request) -> web.Response:
     session_id = request.match_info["sid"]
     session = get_prediction_session(session_id)
     if session is None:
-        raise web.HTTPNotFound(
+        return web.Response(
             text=(
-                "Ссылка устарела или бот перезапускался.\n\n"
-                "Вернитесь в Telegram и нажмите «Сделать прогноз» ещё раз."
+                "<!DOCTYPE html><html lang='ru'><head><meta charset='utf-8'>"
+                "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+                "<title>Ссылка устарела</title></head><body>"
+                "<p>Ссылка устарела или истекла.</p>"
+                "<p>Вернитесь в Telegram и нажмите «Сделать прогноз» ещё раз.</p>"
+                "</body></html>"
             ),
-            content_type="text/plain; charset=utf-8",
+            status=404,
+            content_type="text/html",
+            charset="utf-8",
         )
     content = _build_prediction_html(session_id, session)
     logger.info(

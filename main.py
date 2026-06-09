@@ -8,8 +8,8 @@ from aiogram.fsm.storage.redis import RedisStorage, Redis
 
 from bot.bot import main_bot
 from bot.config import load_config
-from bot.handlers import (creator_handlers, tournament_menu_handler,
-                          user_tournament_handler)
+from bot.handlers import (creator_handlers, error_handler,
+                          tournament_menu_handler, user_tournament_handler)
 from bot.scheduler.scheduler import scheduler
 from bot.webapp_server import start_webapp_server
 
@@ -32,6 +32,7 @@ async def main():
     )
     storage = RedisStorage(redis=redis)
     dp = Dispatcher(storage=storage)
+    dp.include_router(error_handler.router)
     dp.include_router(user_tournament_handler.router)
     dp.include_router(tournament_menu_handler.router)
     dp.include_router(creator_handlers.router)
