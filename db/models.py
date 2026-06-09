@@ -13,14 +13,24 @@ class Player(Base):
     id = Column(Integer, primary_key=True)
     points = Column(Integer, default=0)
     group = Column(String, nullable=True)
-    tournament_id = Column(Integer, ForeignKey("tournament.id"), nullable=False)
+    tournament_id = Column(
+        Integer, ForeignKey("tournament.id", ondelete="CASCADE"), nullable=False
+    )
     is_eliminated = Column(Boolean, default=False)
     user_id = Column(Integer, ForeignKey("user.id"), nullable=False)
 
     user = relationship("User", back_populates="players")
-    match_predictions = relationship("MatchPrediction", back_populates="player")
+    match_predictions = relationship(
+        "MatchPrediction",
+        back_populates="player",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
     tournament_predictions = relationship(
-        "TournamentPrediction", back_populates="player"
+        "TournamentPrediction",
+        back_populates="player",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
     tournament = relationship("Tournament", back_populates="players")
 
@@ -40,7 +50,9 @@ class GroupHistory(Base):
     id = Column(Integer, primary_key=True)
     group_distribution = Column(JSON, nullable=False, default=list)
     timestamp = Column(DateTime, default=datetime.now(), nullable=False)
-    tournament_id = Column(Integer, ForeignKey("tournament.id"), nullable=False)
+    tournament_id = Column(
+        Integer, ForeignKey("tournament.id", ondelete="CASCADE"), nullable=False
+    )
 
     tournament = relationship("Tournament", back_populates="grouphistory")
 
@@ -73,34 +85,70 @@ class Tournament(Base):
 
     user = relationship("User", back_populates="tournaments")
     tournament_predictions = relationship(
-        "TournamentPrediction", back_populates="tournament"
+        "TournamentPrediction",
+        back_populates="tournament",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
-    players = relationship("Player", back_populates="tournament")
-    grouphistory = relationship("GroupHistory", back_populates="tournament")
+    players = relationship(
+        "Player",
+        back_populates="tournament",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    grouphistory = relationship(
+        "GroupHistory",
+        back_populates="tournament",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
     tours = relationship(
-        "Tour", back_populates="tournament", foreign_keys="[Tour.tournament_id]"
+        "Tour",
+        back_populates="tournament",
+        foreign_keys="[Tour.tournament_id]",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
     current_tour = relationship(
         "Tour", foreign_keys=[current_tour_id], post_update=True
     )
-    matches = relationship("Match", back_populates="tournament")
-    resetpoints = relationship("ResetPoints", back_populates="tournament")
+    matches = relationship(
+        "Match",
+        back_populates="tournament",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    resetpoints = relationship(
+        "ResetPoints",
+        back_populates="tournament",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class Tour(Base):
     __tablename__ = "tour"
     id = Column(Integer, primary_key=True)
     number = Column(Integer, nullable=False)
-    tournament_id = Column(Integer, ForeignKey("tournament.id"))
+    tournament_id = Column(Integer, ForeignKey("tournament.id", ondelete="CASCADE"))
     next_deadline = Column(DateTime, nullable=False)
     split_matches_by_groups = Column(Boolean, nullable=False, default=True)
 
     tournament = relationship(
         "Tournament", back_populates="tours", foreign_keys=[tournament_id]
     )
-    matches = relationship("Match", back_populates="tour")
+    matches = relationship(
+        "Match",
+        back_populates="tour",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
     resetpoints = relationship(
-        "ResetPoints", back_populates="tour", foreign_keys="[ResetPoints.tour_id]"
+        "ResetPoints",
+        back_populates="tour",
+        foreign_keys="[ResetPoints.tour_id]",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
 
@@ -111,12 +159,17 @@ class Match(Base):
     second_team_score = Column(Integer)
     first_team = Column(String, nullable=False)
     second_team = Column(String, nullable=False)
-    tour_id = Column(Integer, ForeignKey("tour.id"))
-    tournament_id = Column(Integer, ForeignKey("tournament.id"))
+    tour_id = Column(Integer, ForeignKey("tour.id", ondelete="CASCADE"))
+    tournament_id = Column(Integer, ForeignKey("tournament.id", ondelete="CASCADE"))
 
     tournament = relationship("Tournament", back_populates="matches")
     tour = relationship("Tour", back_populates="matches")
-    match_predictions = relationship("MatchPrediction", back_populates="match")
+    match_predictions = relationship(
+        "MatchPrediction",
+        back_populates="match",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class MatchPrediction(Base):
@@ -124,8 +177,10 @@ class MatchPrediction(Base):
     id = Column(Integer, primary_key=True)
     first_team_score = Column(Integer, default=0)
     second_team_score = Column(Integer, default=0)
-    match_id = Column(Integer, ForeignKey("match.id"), nullable=False)
-    player_id = Column(Integer, ForeignKey("player.id"), nullable=False)
+    match_id = Column(Integer, ForeignKey("match.id", ondelete="CASCADE"), nullable=False)
+    player_id = Column(
+        Integer, ForeignKey("player.id", ondelete="CASCADE"), nullable=False
+    )
     points = Column(Integer, default=0)
     is_calculated = Column(Boolean, default=False)
 
@@ -143,8 +198,8 @@ class TournamentPrediction(Base):
     winner = Column(String, nullable=True)
     best_striker = Column(String, nullable=True)
     best_assistant = Column(String, nullable=True)
-    tournament_id = Column(Integer, ForeignKey("tournament.id"))
-    player_id = Column(Integer, ForeignKey("player.id"))
+    tournament_id = Column(Integer, ForeignKey("tournament.id", ondelete="CASCADE"))
+    player_id = Column(Integer, ForeignKey("player.id", ondelete="CASCADE"))
 
     tournament = relationship("Tournament", back_populates="tournament_predictions")
     player = relationship("Player", back_populates="tournament_predictions")
@@ -161,8 +216,10 @@ class ResetPoints(Base):
     __tablename__ = "reset_points"
     id = Column(Integer, primary_key=True)
     timestamp = Column(DateTime, default=datetime.now(), nullable=False)
-    tournament_id = Column(Integer, ForeignKey("tournament.id"), nullable=False)
-    tour_id = Column(Integer, ForeignKey("tour.id"), nullable=False)
+    tournament_id = Column(
+        Integer, ForeignKey("tournament.id", ondelete="CASCADE"), nullable=False
+    )
+    tour_id = Column(Integer, ForeignKey("tour.id", ondelete="CASCADE"), nullable=False)
 
     tournament = relationship(
         "Tournament", back_populates="resetpoints", foreign_keys=[tournament_id]
