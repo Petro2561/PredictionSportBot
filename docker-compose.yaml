@@ -59,6 +59,7 @@ services:
       REDIS_PORT: 16379
       DATABASE_URL: postgresql+asyncpg://tg_user:tg_pass@127.0.0.1:15432/bonds_bot
       WEBAPP_PORT: 8082
+      WEBAPP_URL: ${WEBAPP_URL}
 
   admin:
     build:

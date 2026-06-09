@@ -1,7 +1,9 @@
 """SQLAdmin: uvicorn admin.main:app --reload --port 8000"""
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from sqladmin import Admin, ModelView
+from sqlalchemy import func, select
+from starlette.requests import Request
 from sqladmin import widgets as sqladmin_widgets
 from sqlalchemy.ext.asyncio import create_async_engine
 from starlette.middleware.sessions import SessionMiddleware
@@ -313,7 +315,7 @@ class UserAdmin(ModelView, model=User):
     name_plural = "Пользователи"
     icon = "fa-solid fa-user"
     can_create = False
-    can_delete = False
+    can_delete = True
 
     column_list = [User.id, User.name, User.username, User.telegram_id]
     column_searchable_list = [User.name, User.username]
@@ -325,13 +327,29 @@ class UserAdmin(ModelView, model=User):
         User.telegram_id: "Telegram ID",
     }
 
+    async def on_model_delete(self, model: User, request: Request) -> None:
+        async with engine.connect() as conn:
+            tournaments_count = await conn.scalar(
+                select(func.count())
+                .select_from(Tournament)
+                .where(Tournament.user_id == model.id)
+            )
+        if tournaments_count:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Нельзя удалить: пользователь владеет турниром. "
+                    "Сначала удалите турнир или смените владельца."
+                ),
+            )
+
 
 class PlayerAdmin(ModelView, model=Player):
     name = "Игрок"
     name_plural = "Игроки"
     icon = "fa-solid fa-users"
     can_create = False
-    can_delete = False
+    can_delete = True
 
     column_list = [
         Player.id,

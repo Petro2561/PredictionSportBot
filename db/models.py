@@ -17,7 +17,9 @@ class Player(Base):
         Integer, ForeignKey("tournament.id", ondelete="CASCADE"), nullable=False
     )
     is_eliminated = Column(Boolean, default=False)
-    user_id = Column(Integer, ForeignKey("user.id"), nullable=False)
+    user_id = Column(
+        Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
 
     user = relationship("User", back_populates="players")
     match_predictions = relationship(
@@ -64,7 +66,12 @@ class User(Base):
     name = Column(String)
     telegram_id = Column(BigInteger, unique=True)
 
-    players = relationship("Player", back_populates="user")
+    players = relationship(
+        "Player",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
     tournaments = relationship("Tournament", back_populates="user")
 
 

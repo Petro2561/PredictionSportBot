@@ -47,7 +47,9 @@ class Config:
 
 def load_config(path: str | None = None) -> Config:
     env = Env()
-    env.read_env(path)
+    # override=True: при volume-mount .env на сервере файл важнее env контейнера
+    # (docker compose restart не обновляет env_file без --force-recreate)
+    env.read_env(path, override=True)
     return Config(
         tg_bot=TgBot(
             token=env("BOT_TOKEN"), admin_ids=list(map(int, env.list("ADMIN_IDS")))
