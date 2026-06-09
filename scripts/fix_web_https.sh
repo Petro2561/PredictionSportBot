@@ -8,6 +8,12 @@ ENV_FILE=".env"
 HTTP_URL="http://87.249.44.152"
 HTTPS_URL="https://87-249-44-152.sslip.io"
 
+if ! grep -qE '^ACME_EMAIL[[:space:]]*=' "$ENV_FILE" || grep -qE '^ACME_EMAIL[[:space:]]*=[[:space:]]*$' "$ENV_FILE" || grep -q 'example.com' "$ENV_FILE"; then
+  echo "Добавьте в .env реальный ACME_EMAIL (ваш Gmail), например:"
+  echo "  ACME_EMAIL = your@gmail.com"
+  exit 1
+fi
+
 read_env() {
   grep -E "^${1}[[:space:]]*=" "$ENV_FILE" 2>/dev/null | head -1 | sed -E "s/^${1}[[:space:]]*=[[:space:]]*//" | tr -d ' '
 }

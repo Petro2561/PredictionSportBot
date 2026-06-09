@@ -42,6 +42,10 @@ services:
     container_name: psb-web
     restart: unless-stopped
     network_mode: host
+    env_file:
+      - .env
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./caddy_data:/data

@@ -1,5 +1,5 @@
 {
-	email admin@example.com
+	email {$ACME_EMAIL}
 }
 
 # HTTP по IP — всегда доступен (компьютер, пока нет сертификата)
