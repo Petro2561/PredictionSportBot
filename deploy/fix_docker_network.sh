@@ -25,6 +25,7 @@ echo "==> Проверка сети (бот в network_mode: host)"
 sleep 3
 docker compose exec -T bot python -c "
 import urllib.request
+# не форсируем семейство адресов: на этом VPS Telegram доступен по IPv6
 print('status:', urllib.request.urlopen('https://api.telegram.org', timeout=15).status)
 "
 docker compose logs bot --tail=5
