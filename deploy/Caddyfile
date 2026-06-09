@@ -1,0 +1,12 @@
+# Домен sslip.io бесплатно указывает на IP сервера (87.249.44.152 → 87-249-44-152.sslip.io)
+# WEBAPP_URL в .env: https://87-249-44-152.sslip.io
+
+87-249-44-152.sslip.io {
+	reverse_proxy 127.0.0.1:8082
+	header Cache-Control "no-store, no-cache, must-revalidate"
+}
+
+# Редирект с голого IP на HTTPS-домен (ссылки из старого .env тоже откроются)
+http://87.249.44.152 {
+	redir https://87-249-44-152.sslip.io{uri} permanent
+}

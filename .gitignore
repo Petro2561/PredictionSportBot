@@ -159,6 +159,8 @@ credentials/
 n8n-*.json
 bin/ngrok
 bin/ngrok.zip
+caddy_data/
+caddy_config/
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
