@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, joinedload
 
 from db.db import DATABASE_URL
-from db.models import Player, TournamentPrediction
+from db.models import Match, Player, TournamentPrediction
 
 
 def _sync_database_url(url: str) -> str:
@@ -38,6 +38,16 @@ def get_player_label(player_id: int | None) -> str:
         if user:
             return user.name or user.username or f"#{player_id}"
         return f"#{player_id}"
+
+
+def get_match_label(match_id: int | None) -> str:
+    if not match_id:
+        return "—"
+    with Session(_sync_engine()) as session:
+        match = session.get(Match, match_id)
+        if not match:
+            return f"#{match_id}"
+        return f"{match.first_team} — {match.second_team}"
 
 
 def get_tournament_prediction(

@@ -118,10 +118,10 @@ async def keyboard_menu(user_id, tournament_id, telegram_id: int | None = None):
         text="Посмотреть список участников",
         callback_data=MenuCallbackFactory(action="show_players").pack(),
     )
-    button_table = InlineKeyboardButton(
-        text="Посмотреть таблицу",
-        callback_data=MenuCallbackFactory(action="show_table").pack(),
-    )
+    # button_table = InlineKeyboardButton(
+    #     text="Посмотреть таблицу",
+    #     callback_data=MenuCallbackFactory(action="show_table").pack(),
+    # )
     tournament = await get_tournament(tournament_id)
     player = next(
         (p for p in tournament.players if p.user_id == user_id),

@@ -11,10 +11,18 @@ _boolean_widget = getattr(sqladmin_widgets, "BooleanInputWidget", None)
 if _boolean_widget and not getattr(_boolean_widget, "validation_attrs", None):
     _boolean_widget.validation_attrs = ["required", "disabled"]
 
-from admin.helpers import get_player_label
+from admin.helpers import get_match_label, get_player_label
 from bot.config import load_config
 from db.db import DATABASE_URL
-from db.models import Match, Player, Tour, Tournament, TournamentPrediction, User
+from db.models import (
+    Match,
+    MatchPrediction,
+    Player,
+    Tour,
+    Tournament,
+    TournamentPrediction,
+    User,
+)
 
 from .auth import AdminAuth
 
@@ -195,6 +203,66 @@ class MatchAdmin(ModelView, model=Match):
     }
 
 
+class MatchPredictionAdmin(ModelView, model=MatchPrediction):
+    name = "Прогноз на матч"
+    name_plural = "Прогнозы на матчи"
+    icon = "fa-solid fa-clipboard-list"
+
+    column_list = [
+        MatchPrediction.id,
+        MatchPrediction.match_id,
+        MatchPrediction.player_id,
+        MatchPrediction.first_team_score,
+        MatchPrediction.second_team_score,
+        MatchPrediction.points,
+        MatchPrediction.is_calculated,
+    ]
+    column_sortable_list = [
+        MatchPrediction.id,
+        MatchPrediction.match_id,
+        MatchPrediction.player_id,
+        MatchPrediction.points,
+        MatchPrediction.is_calculated,
+    ]
+    column_default_sort = [(MatchPrediction.id, False)]
+
+    form_columns = [
+        MatchPrediction.match,
+        MatchPrediction.player,
+        MatchPrediction.first_team_score,
+        MatchPrediction.second_team_score,
+        MatchPrediction.points,
+        MatchPrediction.is_calculated,
+    ]
+
+    form_ajax_refs = {
+        "match": {
+            "fields": ["first_team", "second_team"],
+            "order_by": "id",
+        },
+        "player": {
+            "fields": ["id"],
+            "order_by": "id",
+        },
+    }
+
+    column_formatters = {
+        MatchPrediction.match_id: lambda model, _: get_match_label(model.match_id),
+        MatchPrediction.player_id: lambda model, _: get_player_label(model.player_id),
+    }
+
+    column_labels = {
+        MatchPrediction.match_id: "Матч",
+        MatchPrediction.player_id: "Игрок",
+        MatchPrediction.first_team_score: "Счёт команды 1",
+        MatchPrediction.second_team_score: "Счёт команды 2",
+        MatchPrediction.points: "Очки",
+        MatchPrediction.is_calculated: "Подсчитано",
+        MatchPrediction.match: "Матч",
+        MatchPrediction.player: "Игрок",
+    }
+
+
 class TournamentPredictionAdmin(ModelView, model=TournamentPrediction):
     name = "Прогноз турнира"
     name_plural = "Прогнозы турнира"
@@ -297,6 +365,7 @@ class PlayerAdmin(ModelView, model=Player):
 admin.add_view(TournamentAdmin)
 admin.add_view(TourAdmin)
 admin.add_view(MatchAdmin)
+admin.add_view(MatchPredictionAdmin)
 admin.add_view(TournamentPredictionAdmin)
 admin.add_view(PlayerAdmin)
 admin.add_view(UserAdmin)
