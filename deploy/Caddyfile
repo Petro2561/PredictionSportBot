@@ -1,15 +1,23 @@
 {
 	email {$ACME_EMAIL}
+	cert_issuer acme {
+		disable_tlsalpn_challenge
+	}
 }
 
-# HTTP по IP — всегда доступен (компьютер, пока нет сертификата)
+# HTTP по IP — компьютер
 http://87.249.44.152 {
 	reverse_proxy 127.0.0.1:8082
 	header Cache-Control "no-store, no-cache, must-revalidate"
 }
 
-# HTTPS для Telegram на телефоне (Let's Encrypt, домен sslip.io → IP)
+# HTTPS для Telegram на телефоне (сертификат через http-01 на порту 80)
 87-249-44-152.sslip.io {
+	tls {
+		issuer acme {
+			disable_tlsalpn_challenge
+		}
+	}
 	reverse_proxy 127.0.0.1:8082
 	header Cache-Control "no-store, no-cache, must-revalidate"
 }
