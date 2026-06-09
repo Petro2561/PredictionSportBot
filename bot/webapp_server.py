@@ -12,6 +12,10 @@ from bot.webapp_sessions import get_latest_session_for_user, get_prediction_sess
 logger = logging.getLogger(__name__)
 
 WEBAPP_DIR = Path(__file__).resolve().parent.parent / "webapp"
+_NO_CACHE_HEADERS = {
+    "Cache-Control": "no-store, no-cache, must-revalidate",
+    "Pragma": "no-cache",
+}
 
 
 def _read_webapp_asset(relative_path: str) -> str:
@@ -158,6 +162,7 @@ async def _prediction_page(request: web.Request) -> web.Response:
             status=404,
             content_type="text/html",
             charset="utf-8",
+            headers=_NO_CACHE_HEADERS,
         )
     content = _build_prediction_html(session_id, session)
     logger.info(
@@ -166,7 +171,12 @@ async def _prediction_page(request: web.Request) -> web.Response:
         session.get("user_id"),
         len(session.get("matches", [])),
     )
-    return web.Response(text=content, content_type="text/html")
+    return web.Response(
+        text=content,
+        content_type="text/html",
+        charset="utf-8",
+        headers=_NO_CACHE_HEADERS,
+    )
 
 
 async def start_webapp_server(host: str = "0.0.0.0", port: int = 8080) -> web.AppRunner:

@@ -115,7 +115,10 @@ function validateCard(card) {
 function renderForm(matches) {
   const root = document.getElementById("matches");
   if (root.querySelector(".match-card")) {
-    document.getElementById("submit-btn").disabled = !matches.length;
+    const submitBtn = document.getElementById("submit-btn");
+    if (submitBtn) {
+      submitBtn.disabled = !matches.length;
+    }
     return;
   }
 
@@ -224,4 +227,12 @@ async function init() {
   });
 }
 
-document.addEventListener("DOMContentLoaded", init);
+function startApp() {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => void init());
+  } else {
+    void init();
+  }
+}
+
+startApp();
