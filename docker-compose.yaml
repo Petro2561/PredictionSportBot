@@ -97,8 +97,6 @@ services:
       DATABASE_URL: postgresql+asyncpg://tg_user:tg_pass@127.0.0.1:15432/bonds_bot
       WEBAPP_PORT: 8082
       WEBAPP_URL: ${WEBAPP_URL}
-      TELEGRAM_IPV6: 1
-      TELEGRAM_SKIP_DELETE_WEBHOOK: 1
 
   admin:
     build:
