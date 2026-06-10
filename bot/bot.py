@@ -14,15 +14,17 @@ config = load_config()
 
 
 class BotSession(AiohttpSession):
-    """Сессия для VPS: без keep-alive, IPv4, повтор при сбое сети."""
+    """Сессия для VPS: без keep-alive, опционально IPv6/IPv4, повтор при сбое сети."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._connector_init["force_close"] = True
         self._connector_init["enable_cleanup_closed"] = True
-        # На Timeweb Telegram часто доступен по IPv6; IPv4 включается явно: TELEGRAM_IPV4=1
+        # Timeweb: IPv4 к api.telegram.org часто таймаутит, нужен IPv6 (TELEGRAM_IPV6=1)
         if os.getenv("TELEGRAM_IPV4", "0") == "1":
             self._connector_init["family"] = socket.AF_INET
+        elif os.getenv("TELEGRAM_IPV6", "0") == "1":
+            self._connector_init["family"] = socket.AF_INET6
 
     async def make_request(self, bot, method, timeout=None):
         retries = int(os.getenv("TELEGRAM_RETRIES", "3"))

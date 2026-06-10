@@ -5,8 +5,16 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 echo "=== curl api.telegram.org ==="
-curl -4 -sS -o /dev/null -w "IPv4: HTTP %{http_code}, %{time_total}s\n" --max-time 15 https://api.telegram.org || echo "IPv4: FAIL"
-curl -6 -sS -o /dev/null -w "IPv6: HTTP %{http_code}, %{time_total}s\n" --max-time 15 https://api.telegram.org 2>/dev/null || echo "IPv6: FAIL или недоступен"
+if curl -4 -sS -o /dev/null -w "IPv4: HTTP %{http_code}, %{time_total}s\n" --max-time 15 https://api.telegram.org; then
+  :
+else
+  echo "IPv4: FAIL (таймаут) — на Timeweb для бота нужен TELEGRAM_IPV6=1"
+fi
+if curl -6 -sS -o /dev/null -w "IPv6: HTTP %{http_code}, %{time_total}s\n" --max-time 15 https://api.telegram.org 2>/dev/null; then
+  :
+else
+  echo "IPv6: FAIL — проверьте сеть VPS"
+fi
 
 echo
 echo "=== getMe из контейнера бота ==="
