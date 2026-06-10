@@ -17,14 +17,21 @@ else
 fi
 
 echo
+echo "=== env бота ==="
+docker compose exec -T bot env | grep -E '^TELEGRAM_' || true
+
+echo
 echo "=== getMe из контейнера бота ==="
 docker compose exec -T bot python -c "
 import asyncio
 from bot.bot import main_bot
 
 async def main():
-    me = await main_bot.get_me()
-    print('OK:', me.username, me.id)
+    try:
+        me = await main_bot.get_me()
+        print('OK:', me.username, me.id)
+    finally:
+        await main_bot.session.close()
 
 asyncio.run(main())
 " || echo "getMe: FAIL — бот не достучался до Telegram"

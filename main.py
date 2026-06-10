@@ -39,17 +39,24 @@ async def main():
 
     scheduler.start()
 
-    try:
-        await asyncio.wait_for(
-            main_bot.delete_webhook(drop_pending_updates=False),
-            timeout=20,
-        )
-        logger.info("Webhook cleared")
-    except Exception as exc:
-        logger.warning("delete_webhook не удался, запускаем polling: %s", exc)
+    if os.getenv("TELEGRAM_SKIP_DELETE_WEBHOOK", "1") == "0":
+        try:
+            await asyncio.wait_for(
+                main_bot.delete_webhook(drop_pending_updates=False),
+                timeout=15,
+            )
+            logger.info("Webhook cleared")
+        except Exception as exc:
+            logger.warning("delete_webhook не удался: %s", exc)
+    else:
+        logger.info("delete_webhook пропущен (polling, TELEGRAM_SKIP_DELETE_WEBHOOK=1)")
 
     logger.info("Starting polling")
-    await dp.start_polling(main_bot)
+    try:
+        await dp.start_polling(main_bot)
+    finally:
+        await main_bot.session.close()
+        logger.info("Bot session closed")
 
 
 if __name__ == "__main__":

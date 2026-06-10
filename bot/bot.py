@@ -58,8 +58,22 @@ class BotSession(AiohttpSession):
         raise RuntimeError("unreachable")
 
 
+def _telegram_family_label() -> str:
+    if os.getenv("TELEGRAM_IPV4", "0") == "1":
+        return "IPv4"
+    if os.getenv("TELEGRAM_IPV6", "0") == "1":
+        return "IPv6"
+    return "auto"
+
+
 _proxy = os.getenv("TELEGRAM_PROXY") or None
 _session = BotSession(proxy=_proxy) if _proxy else BotSession()
 _session.timeout = int(os.getenv("TELEGRAM_TIMEOUT", "30"))
 
 main_bot = Bot(token=config.tg_bot.token, session=_session)
+logger.info(
+    "Telegram client: family=%s, timeout=%ss, retries=%s",
+    _telegram_family_label(),
+    _session.timeout,
+    os.getenv("TELEGRAM_RETRIES", "3"),
+)
