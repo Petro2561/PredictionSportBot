@@ -39,8 +39,22 @@ async def main():
 
     scheduler.start()
 
-    await main_bot.delete_webhook(drop_pending_updates=False)
+    try:
+        await asyncio.wait_for(
+            main_bot.delete_webhook(drop_pending_updates=False),
+            timeout=20,
+        )
+        logger.info("Webhook cleared")
+    except Exception as exc:
+        logger.warning("delete_webhook не удался, запускаем polling: %s", exc)
+
+    logger.info("Starting polling")
     await dp.start_polling(main_bot)
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except Exception:
+        logging.exception("Bot stopped with error")
+        raise
