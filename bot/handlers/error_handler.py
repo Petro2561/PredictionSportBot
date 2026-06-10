@@ -15,9 +15,11 @@ async def handle_errors(event: ErrorEvent) -> bool:
     update_id = event.update.update_id if event.update else "?"
 
     if isinstance(exc, TelegramNetworkError):
+        method = getattr(getattr(exc, "method", None), "__api_method__", None)
         logger.warning(
-            "Сеть Telegram недоступна (update %s): %s",
+            "Сеть Telegram недоступна (update %s%s): %s",
             update_id,
+            f", {method}" if method else "",
             exc,
         )
         return True
