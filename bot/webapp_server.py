@@ -7,6 +7,8 @@ from aiohttp import web
 
 from bot.bot import main_bot
 from bot.utils.prediction_submit import save_player_predictions
+from bot.utils.utils_match import predictions_allowed
+from bot.utils.utils_tournament import get_tournament
 from bot.webapp_sessions import get_latest_session_for_user, get_prediction_session
 
 logger = logging.getLogger(__name__)
@@ -128,6 +130,13 @@ async def _submit_predictions(request: web.Request) -> web.Response:
     if not tournament_id or not user_id:
         return web.json_response({"error": "session incomplete"}, status=400)
 
+    tournament = await get_tournament(tournament_id)
+    if not await predictions_allowed(tournament):
+        return web.json_response(
+            {"error": "Приём прогнозов закрыт — тур уже начался или до начала меньше часа."},
+            status=403,
+        )
+
     try:
         message = await save_player_predictions(tournament_id, user_id, predictions)
     except ValueError as error:
@@ -144,6 +153,17 @@ async def _submit_predictions(request: web.Request) -> web.Response:
             logger.exception("Failed to notify user %s in Telegram", telegram_id)
 
     return web.json_response({"ok": True, "message": message})
+
+
+def _prediction_closed_html() -> str:
+    return (
+        "<!DOCTYPE html><html lang='ru'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<title>Приём прогнозов закрыт</title></head><body>"
+        "<p>Приём прогнозов закрыт — тур уже начался или до начала меньше часа.</p>"
+        "<p>Вернитесь в Telegram.</p>"
+        "</body></html>"
+    )
 
 
 async def _prediction_page(request: web.Request) -> web.Response:
@@ -164,6 +184,17 @@ async def _prediction_page(request: web.Request) -> web.Response:
             charset="utf-8",
             headers=_NO_CACHE_HEADERS,
         )
+    tournament_id = session.get("tournament_id")
+    if tournament_id:
+        tournament = await get_tournament(tournament_id)
+        if not await predictions_allowed(tournament):
+            return web.Response(
+                text=_prediction_closed_html(),
+                status=403,
+                content_type="text/html",
+                charset="utf-8",
+                headers=_NO_CACHE_HEADERS,
+            )
     content = _build_prediction_html(session_id, session)
     logger.info(
         "Prediction page sid=%s user_id=%s matches=%s",

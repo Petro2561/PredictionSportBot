@@ -27,8 +27,6 @@ from bot.utils.common import get_tour, send_long_message
 from bot.utils.google_sheets import (
     get_configured_spreadsheet_url,
     sync_google_spreadsheet,
-    tour_has_started,
-    tour_starts_at,
 )
 from bot.utils.random_distribution import (get_group_history,
                                            get_tournament_prediction,
@@ -40,7 +38,7 @@ from bot.utils.match_groups import (
     splits_matches_by_groups,
 )
 from bot.utils.points_results import recalculate_tournament_points
-from bot.utils.utils_match import validate_tour_date
+from bot.utils.utils_match import predictions_allowed, tour_has_started, tour_starts_at
 from bot.utils.utils_tournament import (eleminated_to_front,
                                         get_all_tournaments, get_tournament)
 from bot.utils.utils_user_player import (ensure_user_in_default_tournament,
@@ -520,6 +518,12 @@ async def open_prediction_form(callback_query: CallbackQuery, state: FSMContext)
     await callback_query.answer()
     data = await state.get_data()
     tournament = await get_tournament(data["tournament_id"])
+    if not await predictions_allowed(tournament):
+        await callback_query.answer(
+            "Приём прогнозов закрыт — тур уже начался или до начала меньше часа.",
+            show_alert=True,
+        )
+        return
     player: Player = await get_or_create_player(
         {"tournament_id": data["tournament_id"], "user_id": data["user_id"]}
     )

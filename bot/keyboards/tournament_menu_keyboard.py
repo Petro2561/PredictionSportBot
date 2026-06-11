@@ -14,7 +14,7 @@ from bot.utils.match_groups import (
     get_total_groups,
     splits_matches_by_groups,
 )
-from bot.utils.utils_match import validate_tour_date
+from bot.utils.utils_match import predictions_allowed, tour_has_started
 from bot.utils.utils_tournament import get_all_tournaments, get_tournament
 from bot.utils.random_distribution import add_player_to_group
 from bot.utils.utils_user_player import get_or_create_player
@@ -43,6 +43,11 @@ async def generate_link(
         {"user_id": player.user_id, "tournament_id": tournament.id}
     )
     base_url = config.webapp.url.rstrip("/")
+    if not await predictions_allowed(tournament):
+        return (
+            f"{base_url}/prediction.html",
+            "Приём прогнозов закрыт — тур уже начался или до начала меньше часа.",
+        )
     if not player:
         return f"{base_url}/prediction.html", "Не удалось загрузить профиль игрока."
 
@@ -78,13 +83,7 @@ async def _make_prediction_button(
     player: Player,
     *,
     telegram_id: int | None,
-    date_validation: bool,
 ) -> InlineKeyboardButton:
-    if not date_validation:
-        return InlineKeyboardButton(
-            text="Сделать прогноз",
-            callback_data=MenuCallbackFactory(action="make_prediction_late").pack(),
-        )
     if splits_matches_by_groups(tournament) and not player.group:
         return InlineKeyboardButton(
             text="Сделать прогноз",
@@ -146,19 +145,25 @@ async def keyboard_menu(user_id, tournament_id, telegram_id: int | None = None):
             {"user_id": user_id, "tournament_id": tournament_id}
         )
     if tournament.current_tour_id:
-        date_validation = await validate_tour_date(tournament)
-        button_make_prediction = await _make_prediction_button(
-            tournament,
-            player,
-            telegram_id=telegram_id,
-            date_validation=date_validation,
-        )
         button_show_predictions = InlineKeyboardButton(
             text="Посмотреть прогнозы игроков",
             callback_data=MenuCallbackFactory(action="show_predictions").pack(),
         )
         kb_builder.row(button_show_predictions)
-        kb_builder.row(button_make_prediction)
+        if await predictions_allowed(tournament):
+            button_make_prediction = await _make_prediction_button(
+                tournament,
+                player,
+                telegram_id=telegram_id,
+            )
+            kb_builder.row(button_make_prediction)
+        elif not tour_has_started(tournament):
+            kb_builder.row(
+                InlineKeyboardButton(
+                    text="Сделать прогноз",
+                    callback_data=MenuCallbackFactory(action="make_prediction_late").pack(),
+                )
+            )
     kb_builder.row(button_players)
     # kb_builder.row(button_table)
     if telegram_id and is_bot_admin(telegram_id):

@@ -5,7 +5,11 @@ from bot.utils.match_groups import (
     get_total_groups,
     splits_matches_by_groups,
 )
-from bot.utils.utils_match import get_match_by_teams, update_match_prediction_for_player
+from bot.utils.utils_match import (
+    get_match_by_teams,
+    predictions_allowed,
+    update_match_prediction_for_player,
+)
 from bot.utils.utils_tournament import get_tournament
 from bot.utils.utils_user_player import get_or_create_player
 from bot.webapp_sessions import MatchPair
@@ -60,6 +64,10 @@ async def save_player_predictions(
     tournament_id: int, user_id: int, predictions: list[dict]
 ) -> str:
     tournament = await get_tournament(tournament_id)
+    if not await predictions_allowed(tournament):
+        raise ValueError(
+            "Приём прогнозов закрыт — тур уже начался или до начала меньше часа."
+        )
     player = await get_or_create_player(
         {"tournament_id": tournament_id, "user_id": user_id}
     )

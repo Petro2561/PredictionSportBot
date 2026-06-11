@@ -17,11 +17,12 @@ from bot.utils.match_groups import (
     get_matches_for_player,
     get_tour_matches_sorted,
 )
+from bot.utils.utils_match import tour_has_started, tour_starts_at
 from bot.utils.utils_tournament import get_tournament
 from db.crud.group_history import crud_group_history
 from db.crud.tournament import crud_tournament
 from db.db import get_async_session
-from db.models import Match, MatchPrediction, Player, Tournament
+from db.models import Match, MatchPrediction, Player, Tournament, TournamentPrediction
 from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
@@ -70,18 +71,6 @@ class Stage1Layout:
 
 def _player_block_height(matches_per_player: int, gap: int = PLAYER_BLOCK_GAP) -> int:
     return matches_per_player + gap
-
-
-def tour_has_started(tournament: Tournament) -> bool:
-    if not tournament.current_tour_id or not tournament.current_tour:
-        return False
-    return datetime.now() >= tournament.current_tour.next_deadline
-
-
-def tour_starts_at(tournament: Tournament):
-    if not tournament.current_tour_id or not tournament.current_tour:
-        return None
-    return tournament.current_tour.next_deadline
 
 
 async def should_include_predictions(tournament: Tournament) -> bool:
@@ -232,6 +221,7 @@ def _build_standings_and_predictions(
     tournament: Tournament,
     total_groups: int,
     predictions_by_player: dict[int, dict[int, dict]],
+    extras_by_player: dict[int, tuple[str, str]],
     width: int,
     include_predictions: bool,
     matches: list[Match],
@@ -261,7 +251,12 @@ def _build_standings_and_predictions(
 
     group_header = _pad_row([], width)
     for group_index in range(num_groups):
-        _set_cell(group_header, _group_start_col(group_index), _group_header_label(group_index))
+        start = _group_start_col(group_index)
+        _set_cell(group_header, start, _group_header_label(group_index))
+        if tournament.best_striker:
+            _set_cell(group_header, start + 2, "Бомбардир")
+        if tournament.best_assistant:
+            _set_cell(group_header, start + 3, "Ассистент")
     rows[GROUP_HEADER_ROW] = group_header
 
     for player_index in range(max_players):
@@ -282,6 +277,12 @@ def _build_standings_and_predictions(
                 start + 1,
                 f"=SUM({points_col_letter}{pred_first}:{points_col_letter}{pred_last})",
             )
+            if include_predictions:
+                striker, assistant = extras_by_player.get(player.id, ("", ""))
+                if tournament.best_striker:
+                    _set_cell(standings_row, start + 2, striker)
+                if tournament.best_assistant:
+                    _set_cell(standings_row, start + 3, assistant)
         rows[standings_row_num] = standings_row
 
     if not group_players:
@@ -384,6 +385,9 @@ async def build_stage1_sheet_rows(
         predictions_by_player = await _load_match_predictions_by_player(
             session, tournament.id, tour.id
         )
+        extras_by_player = await _load_tournament_extras_by_player(
+            session, tournament.id
+        )
 
         matches = get_tour_matches_sorted(tournament)
         player_map = {
@@ -415,12 +419,30 @@ async def build_stage1_sheet_rows(
             tournament,
             len(group_history.group_distribution) if group_history else 1,
             predictions_by_player,
+            extras_by_player,
             width,
             include_predictions,
             matches,
         )
         rows_map.update(standings_rows)
         return _rows_dict_to_list(rows_map, width), layout
+
+
+async def _load_tournament_extras_by_player(
+    session, tournament_id: int
+) -> dict[int, tuple[str, str]]:
+    result = await session.execute(
+        select(TournamentPrediction).where(
+            TournamentPrediction.tournament_id == tournament_id
+        )
+    )
+    return {
+        prediction.player_id: (
+            prediction.best_striker or "",
+            prediction.best_assistant or "",
+        )
+        for prediction in result.scalars()
+    }
 
 
 async def _load_match_predictions_by_player(

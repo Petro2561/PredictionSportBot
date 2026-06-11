@@ -94,14 +94,40 @@ async def validate_prediction(match_id, first_team, second_team):
         raise PredictionValidationError
 
 
-async def validate_tour_date(tournament: Tournament) -> bool:
+def _current_tour_deadline(tournament: Tournament):
+    if not tournament.current_tour_id:
+        return None
+    if tournament.current_tour:
+        return tournament.current_tour.next_deadline
+    return None
+
+
+def tour_has_started(tournament: Tournament) -> bool:
+    deadline = _current_tour_deadline(tournament)
+    if deadline is None:
+        return False
+    return datetime.now() >= deadline
+
+
+def tour_starts_at(tournament: Tournament):
+    return _current_tour_deadline(tournament)
+
+
+async def predictions_allowed(tournament: Tournament) -> bool:
     if not tournament.current_tour_id:
         return False
     async for session in get_async_session():
         tour: Tour = await crud_tour.get_tour_by_id(tournament.current_tour_id, session)
         if not tour:
             return False
-        return tour.next_deadline - datetime.now() > timedelta(hours=1)
+        now = datetime.now()
+        if now >= tour.next_deadline:
+            return False
+        return tour.next_deadline - now > timedelta(hours=1)
+
+
+async def validate_tour_date(tournament: Tournament) -> bool:
+    return await predictions_allowed(tournament)
 
 
 async def update_match_results(match_id, first_team_score, second_team_score):
