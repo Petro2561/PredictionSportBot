@@ -73,19 +73,33 @@ async def generate_link(
     return f"{base_url}/p/{session_id}", None
 
 
-async def prediction_form_keyboard(
-    tournament, player: Player, form_url: str | None = None
-):
-    if form_url is None:
-        form_url, _ = await generate_link(tournament=tournament, player=player)
-    kb_builder = InlineKeyboardBuilder()
-    kb_builder.row(
-        InlineKeyboardButton(
-            text="Заполнить прогноз на сайте",
-            url=form_url,
+async def _make_prediction_button(
+    tournament,
+    player: Player,
+    *,
+    telegram_id: int | None,
+    date_validation: bool,
+) -> InlineKeyboardButton:
+    if not date_validation:
+        return InlineKeyboardButton(
+            text="Сделать прогноз",
+            callback_data=MenuCallbackFactory(action="make_prediction_late").pack(),
         )
+    if splits_matches_by_groups(tournament) and not player.group:
+        return InlineKeyboardButton(
+            text="Сделать прогноз",
+            callback_data=MenuCallbackFactory(action="no_group").pack(),
+        )
+
+    form_url, form_error = await generate_link(
+        tournament=tournament, player=player, telegram_id=telegram_id
     )
-    return kb_builder.as_markup()
+    if form_error:
+        return InlineKeyboardButton(
+            text="Сделать прогноз",
+            callback_data=MenuCallbackFactory(action="open_prediction_form").pack(),
+        )
+    return InlineKeyboardButton(text="Сделать прогноз", url=form_url)
 
 
 def draw_groups_count_keyboard(max_groups: int) -> InlineKeyboardMarkup:
@@ -133,21 +147,12 @@ async def keyboard_menu(user_id, tournament_id, telegram_id: int | None = None):
         )
     if tournament.current_tour_id:
         date_validation = await validate_tour_date(tournament)
-        if not date_validation:
-            button_make_prediction = InlineKeyboardButton(
-                text="Сделать прогноз",
-                callback_data=MenuCallbackFactory(action="make_prediction_late").pack(),
-            )
-        elif splits_matches_by_groups(tournament) and not player.group:
-            button_make_prediction = InlineKeyboardButton(
-                text="Сделать прогноз",
-                callback_data=MenuCallbackFactory(action="no_group").pack(),
-            )
-        else:
-            button_make_prediction = InlineKeyboardButton(
-                text="Сделать прогноз",
-                callback_data=MenuCallbackFactory(action="open_prediction_form").pack(),
-            )
+        button_make_prediction = await _make_prediction_button(
+            tournament,
+            player,
+            telegram_id=telegram_id,
+            date_validation=date_validation,
+        )
         button_show_predictions = InlineKeyboardButton(
             text="Посмотреть прогнозы игроков",
             callback_data=MenuCallbackFactory(action="show_predictions").pack(),

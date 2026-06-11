@@ -9,7 +9,6 @@ from bot.bot import main_bot
 from bot.config import load_config
 from bot.handlers import (creator_handlers, error_handler,
                           tournament_menu_handler, user_tournament_handler)
-from bot.scheduler.scheduler import scheduler
 from bot.webapp_server import start_webapp_server
 
 logger = logging.getLogger(__name__)
@@ -36,8 +35,6 @@ async def run() -> None:
     dp.include_router(user_tournament_handler.router)
     dp.include_router(tournament_menu_handler.router)
     dp.include_router(creator_handlers.router)
-
-    scheduler.start()
 
     try:
         await dp.start_polling(main_bot)

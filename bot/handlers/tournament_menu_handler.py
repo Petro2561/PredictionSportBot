@@ -15,8 +15,7 @@ from bot.keyboards.callback_factory import (DrawGroupsCallbackFactory,
 from bot.keyboards.tournament_menu_keyboard import (create_tournament_keyboard,
                                                     draw_groups_count_keyboard,
                                                     generate_link,
-                                                    keyboard_menu,
-                                                    prediction_form_keyboard)
+                                                    keyboard_menu)
 from bot.config import is_bot_admin, load_config
 from bot.states.states import TournamentMenu
 from bot.utils.tournament_predictions import (
@@ -529,14 +528,7 @@ async def open_prediction_form(callback_query: CallbackQuery, state: FSMContext)
         tournament=tournament, player=player, telegram_id=telegram_id
     )
     if form_error:
-        await callback_query.message.answer(
-            form_error,
-            reply_markup=await keyboard_menu(
-                tournament_id=tournament.id,
-                user_id=data["user_id"],
-                telegram_id=telegram_id,
-            ),
-        )
+        await callback_query.answer(form_error, show_alert=True)
         return
 
     logger.info(
@@ -545,11 +537,14 @@ async def open_prediction_form(callback_query: CallbackQuery, state: FSMContext)
         telegram_id,
         form_url,
     )
-    await callback_query.message.answer(
-        f"Откройте форму на сайте и укажите счёт для каждого матча:\n\n{form_url}",
-        reply_markup=await prediction_form_keyboard(tournament, player, form_url),
-        disable_web_page_preview=True,
+    await callback_query.message.edit_reply_markup(
+        reply_markup=await keyboard_menu(
+            tournament_id=tournament.id,
+            user_id=data["user_id"],
+            telegram_id=telegram_id,
+        )
     )
+    await callback_query.answer("Ссылка обновлена — нажмите «Сделать прогноз»")
 
 
 @router.callback_query(
