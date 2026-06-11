@@ -156,6 +156,10 @@ def _points_formula(
     pred_score_cols: tuple[int, int],
     schedule_score_cols: tuple[int, int],
     diff_col: int,
+    *,
+    exact_points: int = 3,
+    diff_points: int = 2,
+    outcome_points: int = 1,
 ) -> str:
     pc1, pc2 = (_column_letter(c) for c in pred_score_cols)
     sc1, sc2 = (_column_letter(c) for c in schedule_score_cols)
@@ -163,9 +167,9 @@ def _points_formula(
     s = FORMULA_SEP
     return (
         f"=IF(ISBLANK(${sc1}${schedule_row}){s}\"\"{s}"
-        f"IF(AND({pc1}{pred_row}=${sc1}${schedule_row}{s}{pc2}{pred_row}=${sc2}${schedule_row}){s}4{s}"
-        f"IF({pc1}{pred_row}-{pc2}{pred_row}=${sc1}${schedule_row}-${sc2}${schedule_row}{s}2{s}"
-        f"IF({pe}{pred_row}>0{s}1{s}0))))"
+        f"IF(AND({pc1}{pred_row}=${sc1}${schedule_row}{s}{pc2}{pred_row}=${sc2}${schedule_row}){s}{exact_points}{s}"
+        f"IF({pc1}{pred_row}-{pc2}{pred_row}=${sc1}${schedule_row}-${sc2}${schedule_row}{s}{diff_points}{s}"
+        f"IF({pe}{pred_row}>0{s}{outcome_points}{s}0))))"
     )
 
 
@@ -244,6 +248,9 @@ def _build_standings_and_predictions(
         + max_players
         + STANDINGS_TO_PREDICTIONS_GAP,
     )
+    exact_points = tournament.exact_score_points if tournament.exact_score_points is not None else 3
+    diff_points = tournament.difference_points if tournament.difference_points is not None else 2
+    outcome_points = tournament.results_points if tournament.results_points is not None else 1
 
     section_row = _pad_row([], width)
     _set_cell(section_row, 1, SECTION_TOUR_LABEL)
@@ -349,6 +356,9 @@ def _build_standings_and_predictions(
                         pred_score_cols,
                         schedule_score_cols,
                         diff_col,
+                        exact_points=exact_points,
+                        diff_points=diff_points,
+                        outcome_points=outcome_points,
                     ),
                 )
                 wrote_any = True
