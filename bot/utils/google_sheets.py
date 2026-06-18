@@ -253,7 +253,12 @@ def _build_standings_and_predictions(
     outcome_points = tournament.results_points if tournament.results_points is not None else 1
 
     section_row = _pad_row([], width)
-    _set_cell(section_row, 1, SECTION_TOUR_LABEL)
+    tour_number = (
+        tournament.current_tour.number
+        if tournament.current_tour and tournament.current_tour.number
+        else 1
+    )
+    _set_cell(section_row, 1, f"{tour_number} ТУР")
     rows[SECTION_HEADER_ROW] = section_row
 
     group_header = _pad_row([], width)
@@ -386,8 +391,8 @@ async def build_stage1_sheet_rows(
     async for session in get_async_session():
         tournament = await crud_tournament.get_tournament(tournament.id, session)
         tour = tournament.current_tour
-        if not tour or tour.number != 1:
-            return [["Матчи первого тура ещё не установлены"]], None
+        if not tour:
+            return [["Матчи тура ещё не установлены"]], None
 
         group_history = await crud_group_history.get_last_group_history(
             tournament.id, session
