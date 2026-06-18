@@ -67,6 +67,11 @@ FORMULA_SEP = ";"
 
 TOUR_BLOCK_GAP = 4
 
+SUMMARY_LABEL_ROW = 1
+SUMMARY_HEADER_ROW = 2
+SUMMARY_FIRST_PLAYER_ROW = 3
+SUMMARY_LABEL = "ОБЩИЙ ЗАЧЁТ"
+
 
 @dataclass
 class Stage1Layout:
@@ -77,6 +82,22 @@ class Stage1Layout:
     predictions_start_row: int
     player_block_gap: int = PLAYER_BLOCK_GAP
     base_row: int = 0
+
+
+@dataclass
+class SummaryLayout:
+    width: int
+    num_groups: int
+    max_players: int
+    num_tours: int
+
+
+def _summary_height(max_players: int) -> int:
+    """Высота сводной таблицы сверху (строк), включая разрыв до 1-го тура."""
+    if max_players <= 0:
+        return 0
+    last_player_row = SUMMARY_FIRST_PLAYER_ROW + max_players - 1
+    return last_player_row + TOUR_BLOCK_GAP
 
 
 def _player_block_height(matches_per_player: int, gap: int = PLAYER_BLOCK_GAP) -> int:
@@ -222,6 +243,58 @@ def _player_tour_matches(
     if player_predicts_first_half(player, total_groups):
         return tour_matches[:MATCHES_PER_HALF]
     return tour_matches[MATCHES_PER_HALF : MATCHES_PER_HALF * 2]
+
+
+def _build_summary_section(
+    group_players: list[list[Player]],
+    width: int,
+    max_players: int,
+    tour_bases: list[int],
+) -> dict[int, list]:
+    """Сводная таблица сверху: по каждой группе очки за каждый тур и «Итого»."""
+    rows: dict[int, list] = {}
+    num_tours = len(tour_bases)
+
+    label_row = _pad_row([], width)
+    _set_cell(label_row, 1, SUMMARY_LABEL)
+    rows[SUMMARY_LABEL_ROW] = label_row
+
+    header = _pad_row([], width)
+    for group_index in range(len(group_players)):
+        start = _group_start_col(group_index)
+        _set_cell(header, start, _group_header_label(group_index))
+        for tour_index in range(num_tours):
+            _set_cell(header, start + 1 + tour_index, f"{tour_index + 1} тур")
+        _set_cell(header, start + 1 + num_tours, "Итого")
+    rows[SUMMARY_HEADER_ROW] = header
+
+    for player_index in range(max_players):
+        row_num = SUMMARY_FIRST_PLAYER_ROW + player_index
+        row = _pad_row([], width)
+        for group_index, players in enumerate(group_players):
+            if player_index >= len(players):
+                continue
+            player = players[player_index]
+            start = _group_start_col(group_index)
+            # в блоке тура итог игрока лежит в колонке start+1
+            tour_sum_col = _column_letter(start + 1)
+            _set_cell(row, start, player.user.name or "")
+            for tour_index, base in enumerate(tour_bases):
+                ref_row = base + STANDINGS_START_ROW + player_index
+                _set_cell(
+                    row, start + 1 + tour_index, f"={tour_sum_col}{ref_row}"
+                )
+            if num_tours:
+                first_col = _column_letter(start + 1)
+                last_col = _column_letter(start + num_tours)
+                _set_cell(
+                    row,
+                    start + 1 + num_tours,
+                    f"=SUM({first_col}{row_num}:{last_col}{row_num})",
+                )
+        rows[row_num] = row
+
+    return rows
 
 
 def _build_schedule_section(
@@ -435,12 +508,12 @@ async def _load_tournament_tours(session, tournament_id: int) -> list[Tour]:
 
 async def build_stage1_sheet_rows(
     tournament: Tournament, *, include_predictions: bool
-) -> tuple[list[list], list[Stage1Layout]]:
+) -> tuple[list[list], list[Stage1Layout], SummaryLayout | None]:
     async for session in get_async_session():
         tournament = await crud_tournament.get_tournament(tournament.id, session)
         current_tour = tournament.current_tour
         if not current_tour:
-            return [["Матчи тура ещё не установлены"]], []
+            return [["Матчи тура ещё не установлены"]], [], None
 
         tours = await _load_tournament_tours(session, tournament.id)
 
@@ -453,7 +526,7 @@ async def build_stage1_sheet_rows(
         # только туры, в которых есть матчи; по возрастанию номера
         tours = [t for t in tours if matches_by_tour.get(t.id)]
         if not tours:
-            return [["Матчи тура ещё не установлены"]], []
+            return [["Матчи тура ещё не установлены"]], [], None
 
         group_history = await crud_group_history.get_last_group_history(
             tournament.id, session
@@ -487,12 +560,31 @@ async def build_stage1_sheet_rows(
         matches_per_player = MATCHES_PER_HALF
         block_height = _tour_block_height(max_players, matches_per_player)
 
+        summary_height = _summary_height(max_players)
+        tour_bases = [
+            summary_height + index * block_height for index in range(len(tours))
+        ]
+
         current_number = current_tour.number or 1
         rows_map: dict[int, list] = {}
         layouts: list[Stage1Layout] = []
 
+        summary: SummaryLayout | None = None
+        if summary_height and group_players:
+            rows_map.update(
+                _build_summary_section(
+                    group_players, width, max_players, tour_bases
+                )
+            )
+            summary = SummaryLayout(
+                width=width,
+                num_groups=num_groups,
+                max_players=max_players,
+                num_tours=len(tours),
+            )
+
         for index, tour in enumerate(tours):
-            base = index * block_height
+            base = tour_bases[index]
             tour_matches = matches_by_tour.get(tour.id, [])
             predictions_by_player = await _load_match_predictions_by_player(
                 session, tournament.id, tour.id
@@ -530,7 +622,7 @@ async def build_stage1_sheet_rows(
             rows_map.update(standings_rows)
             layouts.append(layout)
 
-        return _rows_dict_to_list(rows_map, width), layouts
+        return _rows_dict_to_list(rows_map, width), layouts, summary
 
 
 async def _load_tournament_extras_by_player(
@@ -819,10 +911,83 @@ def _tour_format_requests(sheet_id: int, layout: Stage1Layout) -> list[dict]:
     return requests
 
 
-def _formatting_requests(sheet_id: int, layouts: list[Stage1Layout]) -> list[dict]:
+def _summary_format_requests(sheet_id: int, summary: SummaryLayout) -> list[dict]:
+    requests: list[dict] = [
+        {
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": SUMMARY_LABEL_ROW - 1,
+                    "endRowIndex": SUMMARY_LABEL_ROW,
+                    "startColumnIndex": 0,
+                    "endColumnIndex": summary.width,
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "backgroundColor": YELLOW,
+                        "textFormat": {"bold": True, "fontSize": 12},
+                    }
+                },
+                "fields": "userEnteredFormat(backgroundColor,textFormat)",
+            }
+        },
+        {
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": SUMMARY_HEADER_ROW - 1,
+                    "endRowIndex": SUMMARY_HEADER_ROW,
+                    "startColumnIndex": _group_start_col(0) - 1,
+                    "endColumnIndex": summary.width,
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "horizontalAlignment": "CENTER",
+                        "textFormat": {"bold": True, "fontSize": 12},
+                    }
+                },
+                "fields": "userEnteredFormat(horizontalAlignment,textFormat)",
+            }
+        },
+    ]
+
+    if summary.max_players and summary.num_tours:
+        last_player_row = SUMMARY_FIRST_PLAYER_ROW + summary.max_players - 1
+        for group_index in range(summary.num_groups):
+            total_col_index = _group_start_col(group_index) + summary.num_tours
+            requests.append(
+                {
+                    "repeatCell": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "startRowIndex": SUMMARY_FIRST_PLAYER_ROW - 1,
+                            "endRowIndex": last_player_row,
+                            "startColumnIndex": total_col_index,
+                            "endColumnIndex": total_col_index + 1,
+                        },
+                        "cell": {
+                            "userEnteredFormat": {
+                                "textFormat": {"bold": True},
+                            }
+                        },
+                        "fields": "userEnteredFormat.textFormat",
+                    }
+                }
+            )
+
+    return requests
+
+
+def _formatting_requests(
+    sheet_id: int,
+    layouts: list[Stage1Layout],
+    summary: SummaryLayout | None = None,
+) -> list[dict]:
     if not layouts:
         return []
     requests = _column_width_requests(sheet_id, layouts[0])
+    if summary:
+        requests.extend(_summary_format_requests(sheet_id, summary))
     for layout in layouts:
         requests.extend(_tour_format_requests(sheet_id, layout))
     return requests
@@ -834,6 +999,7 @@ def _write_sheet_rows(
     sheet_title: str,
     rows: list[list],
     layouts: list[Stage1Layout] | None,
+    summary: SummaryLayout | None = None,
 ) -> None:
     sheet_id = _get_sheet_id(sheets_service, spreadsheet_id, sheet_title)
 
@@ -856,7 +1022,7 @@ def _write_sheet_rows(
     ).execute()
 
     if layouts:
-        requests = _formatting_requests(sheet_id, layouts)
+        requests = _formatting_requests(sheet_id, layouts, summary)
         if requests:
             sheets_service.spreadsheets().batchUpdate(
                 spreadsheetId=spreadsheet_id,
@@ -865,7 +1031,10 @@ def _write_sheet_rows(
 
 
 def _create_spreadsheet_sync(
-    title: str, rows: list[list], layouts: list[Stage1Layout] | None
+    title: str,
+    rows: list[list],
+    layouts: list[Stage1Layout] | None,
+    summary: SummaryLayout | None = None,
 ) -> str:
     config = load_config()
     credentials = _get_credentials()
@@ -917,7 +1086,9 @@ def _create_spreadsheet_sync(
         },
     ).execute()
 
-    _write_sheet_rows(sheets_service, spreadsheet_id, "Стадия 1", rows, layouts)
+    _write_sheet_rows(
+        sheets_service, spreadsheet_id, "Стадия 1", rows, layouts, summary
+    )
 
     if config.google.share_email:
         drive_service.permissions().create(
@@ -938,12 +1109,15 @@ def _update_spreadsheet_sync(
     sheet_name: str,
     rows: list[list],
     layouts: list[Stage1Layout] | None,
+    summary: SummaryLayout | None = None,
 ) -> str:
     credentials = _get_credentials()
     sheets_service = build("sheets", "v4", credentials=credentials, cache_discovery=False)
     spreadsheet_id = _parse_spreadsheet_id(spreadsheet_id)
     sheet_title = _resolve_sheet_title(sheets_service, spreadsheet_id, sheet_name)
-    _write_sheet_rows(sheets_service, spreadsheet_id, sheet_title, rows, layouts)
+    _write_sheet_rows(
+        sheets_service, spreadsheet_id, sheet_title, rows, layouts, summary
+    )
     return _spreadsheet_url(spreadsheet_id)
 
 
@@ -952,7 +1126,7 @@ async def sync_google_spreadsheet(
 ) -> str:
     if include_predictions is None:
         include_predictions = await should_include_predictions(tournament)
-    rows, layouts = await build_stage1_sheet_rows(
+    rows, layouts, summary = await build_stage1_sheet_rows(
         tournament, include_predictions=include_predictions
     )
     config = load_config()
@@ -963,13 +1137,14 @@ async def sync_google_spreadsheet(
             config.google.spreadsheet_sheet_name,
             rows,
             layouts,
+            summary,
         )
 
     tour = await get_tour(tournament)
     title = f"{tournament.name} — тур {tour.number if tour else '?'}"
     timestamp = datetime.now().strftime("%d.%m.%Y %H:%M")
     return await asyncio.to_thread(
-        _create_spreadsheet_sync, f"{title} ({timestamp})", rows, layouts
+        _create_spreadsheet_sync, f"{title} ({timestamp})", rows, layouts, summary
     )
 
 
