@@ -40,20 +40,20 @@ SCOPES = (
 
 FIRST_GROUP_COL = 2
 GROUP_BLOCK_WIDTH = 7
+
+# Верхняя секция — расписание всех туров по горизонтали (Тур 1, Тур 2, …)
+SCHEDULE_BLANK_ROW = 1
 SCHEDULE_HEADER_ROW = 2
 SCHEDULE_FIRST_MATCH_ROW = 3
-SECTION_HEADER_ROW = 21
-GROUP_HEADER_ROW = 22
-STANDINGS_START_ROW = 23
+
+# Блок одного тура (таблица + прогнозы), смещения относительно base = верх блока − 1
+TOUR_SECTION_ROW = 1  # «N ТУР»
+TOUR_GROUP_ROW = 2  # «Группа A», заголовки
+TOUR_STANDINGS_ROW = 3  # первая строка зачёта тура
 STANDINGS_TO_PREDICTIONS_GAP = 2
 PLAYER_BLOCK_GAP = 2
 
 GROUP_HEADER_SUFFIXES = ("А", "B", "C", "D", "E", "F", "G", "H")
-HALF_LABELS = (
-    f"часть 1 (матчи 1–{MATCHES_PER_HALF})",
-    f"часть 2 (матчи {MATCHES_PER_HALF + 1}–{MATCHES_PER_HALF * 2})",
-)
-SECTION_TOUR_LABEL = "1 ТУР"
 
 COL_A_WIDTH = 13.63
 BLOCK_COL_WIDTHS = (26.38, 3.63, 13.0, 13.0, 4.5, 3.63, 14.38)
@@ -66,10 +66,7 @@ FORMULA_SEP = ";"
 
 
 TOUR_BLOCK_GAP = 4
-
-SUMMARY_LABEL_ROW = 1
-SUMMARY_HEADER_ROW = 2
-SUMMARY_FIRST_PLAYER_ROW = 3
+SECTION_GAP = 2
 SUMMARY_LABEL = "ОБЩИЙ ЗАЧЁТ"
 
 
@@ -90,25 +87,29 @@ class SummaryLayout:
     num_groups: int
     max_players: int
     num_tours: int
+    label_row: int
+    header_row: int
+    first_player_row: int
 
 
-def _summary_height(max_players: int) -> int:
-    """Высота сводной таблицы сверху (строк), включая разрыв до 1-го тура."""
-    if max_players <= 0:
-        return 0
-    last_player_row = SUMMARY_FIRST_PLAYER_ROW + max_players - 1
-    return last_player_row + TOUR_BLOCK_GAP
+def _num_blocks_from_width(width: int) -> int:
+    return (width - FIRST_GROUP_COL + 2) // GROUP_BLOCK_WIDTH
 
 
 def _player_block_height(matches_per_player: int, gap: int = PLAYER_BLOCK_GAP) -> int:
     return matches_per_player + gap
 
 
+def _predictions_start_offset(max_players: int) -> int:
+    """Смещение первой строки прогнозов относительно base блока тура."""
+    return TOUR_STANDINGS_ROW + max_players + STANDINGS_TO_PREDICTIONS_GAP
+
+
 def _tour_block_height(max_players: int, matches_per_player: int) -> int:
     """Высота одного блока тура (строк), включая разрыв до следующего тура."""
-    predictions_start = STANDINGS_START_ROW + max_players + STANDINGS_TO_PREDICTIONS_GAP
+    predictions_start = _predictions_start_offset(max_players)
     predictions_rows = max_players * _player_block_height(matches_per_player)
-    return predictions_start + predictions_rows + TOUR_BLOCK_GAP
+    return predictions_start - 1 + predictions_rows + TOUR_BLOCK_GAP
 
 
 async def should_include_predictions(tournament: Tournament) -> bool:
@@ -164,25 +165,6 @@ def _column_letter(index: int) -> str:
 
 def _excel_width_to_pixels(width: float) -> int:
     return max(21, int(width * 7 + 10))
-
-
-def _schedule_half_col(half_index: int) -> int:
-    """Левая колонка — 1-я половина групп (A/B), правая — 2-я (C/D)."""
-    return _group_start_col(half_index)
-
-
-def _schedule_score_cols(half_index: int) -> tuple[int, int]:
-    start = _schedule_half_col(half_index)
-    return start + 1, start + 2
-
-
-def _schedule_coords_for_match(
-    absolute_index: int, base: int = 0
-) -> tuple[int, int, tuple[int, int]]:
-    half_index = 0 if absolute_index < MATCHES_PER_HALF else 1
-    slot = absolute_index % MATCHES_PER_HALF
-    schedule_row = base + SCHEDULE_FIRST_MATCH_ROW + slot
-    return schedule_row, half_index, _schedule_score_cols(half_index)
 
 
 def _prediction_row_for(player_index: int, match_index: int, layout: Stage1Layout) -> int:
@@ -250,14 +232,15 @@ def _build_summary_section(
     width: int,
     max_players: int,
     tour_bases: list[int],
+    summary: SummaryLayout,
 ) -> dict[int, list]:
-    """Сводная таблица сверху: по каждой группе очки за каждый тур и «Итого»."""
+    """Сводная таблица: по каждой группе очки за каждый тур и «Итого»."""
     rows: dict[int, list] = {}
     num_tours = len(tour_bases)
 
     label_row = _pad_row([], width)
     _set_cell(label_row, 1, SUMMARY_LABEL)
-    rows[SUMMARY_LABEL_ROW] = label_row
+    rows[summary.label_row] = label_row
 
     header = _pad_row([], width)
     for group_index in range(len(group_players)):
@@ -266,10 +249,10 @@ def _build_summary_section(
         for tour_index in range(num_tours):
             _set_cell(header, start + 1 + tour_index, f"{tour_index + 1} тур")
         _set_cell(header, start + 1 + num_tours, "Итого")
-    rows[SUMMARY_HEADER_ROW] = header
+    rows[summary.header_row] = header
 
     for player_index in range(max_players):
-        row_num = SUMMARY_FIRST_PLAYER_ROW + player_index
+        row_num = summary.first_player_row + player_index
         row = _pad_row([], width)
         for group_index, players in enumerate(group_players):
             if player_index >= len(players):
@@ -280,7 +263,7 @@ def _build_summary_section(
             tour_sum_col = _column_letter(start + 1)
             _set_cell(row, start, player.user.name or "")
             for tour_index, base in enumerate(tour_bases):
-                ref_row = base + STANDINGS_START_ROW + player_index
+                ref_row = base + TOUR_STANDINGS_ROW + player_index
                 _set_cell(
                     row, start + 1 + tour_index, f"={tour_sum_col}{ref_row}"
                 )
@@ -298,34 +281,39 @@ def _build_summary_section(
 
 
 def _build_schedule_section(
-    matches: list[Match], width: int, base: int = 0
-) -> dict[int, list]:
-    rows: dict[int, list] = {base + 1: _pad_row([], width)}
+    tours_matches: list[tuple[int, list[Match]]],
+    width: int,
+) -> tuple[dict[int, list], dict[int, tuple[int, tuple[int, int]]], int]:
+    """Расписание всех туров по горизонтали (Тур 1, Тур 2, …).
+
+    Возвращает строки, координаты каждого матча по match.id
+    (row, (score1_col, score2_col)) и номер последней занятой строки.
+    """
+    rows: dict[int, list] = {SCHEDULE_BLANK_ROW: _pad_row([], width)}
+    coords: dict[int, tuple[int, tuple[int, int]]] = {}
 
     header = _pad_row([], width)
-    if matches[:MATCHES_PER_HALF]:
-        _set_cell(header, _schedule_half_col(0), HALF_LABELS[0])
-    if len(matches) > MATCHES_PER_HALF:
-        _set_cell(header, _schedule_half_col(1), HALF_LABELS[1])
-    rows[base + SCHEDULE_HEADER_ROW] = header
-
-    for slot in range(MATCHES_PER_HALF):
-        row_num = base + SCHEDULE_FIRST_MATCH_ROW + slot
-        row = _pad_row([], width)
-        for half_index in range(2):
-            match_index = half_index * MATCHES_PER_HALF + slot
-            if match_index >= len(matches):
-                continue
-            match = matches[match_index]
-            half_col = _schedule_half_col(half_index)
-            score1_col, score2_col = _schedule_score_cols(half_index)
-            _set_cell(row, half_col, _match_label(match))
+    max_matches = 0
+    for block_index, (tour_number, matches) in enumerate(tours_matches):
+        start = _group_start_col(block_index)
+        _set_cell(header, start, f"Тур {tour_number}")
+        max_matches = max(max_matches, len(matches))
+        for match_index, match in enumerate(matches):
+            row_num = SCHEDULE_FIRST_MATCH_ROW + match_index
+            row = rows.get(row_num)
+            if row is None:
+                row = _pad_row([], width)
+                rows[row_num] = row
+            score1_col, score2_col = start + 1, start + 2
+            _set_cell(row, start, _match_label(match))
             if match.first_team_score is not None:
                 _set_cell(row, score1_col, match.first_team_score)
                 _set_cell(row, score2_col, match.second_team_score)
-        rows[row_num] = row
+            coords[match.id] = (row_num, (score1_col, score2_col))
+    rows[SCHEDULE_HEADER_ROW] = header
 
-    return rows
+    schedule_end = SCHEDULE_FIRST_MATCH_ROW + max(max_matches, 1) - 1
+    return rows, coords, schedule_end
 
 
 def _build_standings_and_predictions(
@@ -337,6 +325,7 @@ def _build_standings_and_predictions(
     width: int,
     include_predictions: bool,
     matches: list[Match],
+    schedule_coords: dict[int, tuple[int, tuple[int, int]]],
     *,
     base: int = 0,
     tour_number: int = 1,
@@ -352,10 +341,7 @@ def _build_standings_and_predictions(
         max_standings_rows=max_players,
         matches_per_player=matches_per_player,
         num_groups=num_groups,
-        predictions_start_row=base
-        + STANDINGS_START_ROW
-        + max_players
-        + STANDINGS_TO_PREDICTIONS_GAP,
+        predictions_start_row=base + _predictions_start_offset(max_players),
         base_row=base,
     )
     exact_points = tournament.exact_score_points if tournament.exact_score_points is not None else 3
@@ -364,7 +350,7 @@ def _build_standings_and_predictions(
 
     section_row = _pad_row([], width)
     _set_cell(section_row, 1, f"{tour_number} ТУР")
-    rows[base + SECTION_HEADER_ROW] = section_row
+    rows[base + TOUR_SECTION_ROW] = section_row
 
     group_header = _pad_row([], width)
     for group_index in range(num_groups):
@@ -374,7 +360,7 @@ def _build_standings_and_predictions(
             _set_cell(group_header, start + 2, "Бомбардир")
         if tournament.best_assistant:
             _set_cell(group_header, start + 3, "Ассистент")
-    rows[base + GROUP_HEADER_ROW] = group_header
+    rows[base + TOUR_GROUP_ROW] = group_header
 
     player_matches_cache: dict[int, list[Match]] = {}
 
@@ -386,7 +372,7 @@ def _build_standings_and_predictions(
         return player_matches_cache[player.id]
 
     for player_index in range(max_players):
-        standings_row_num = base + STANDINGS_START_ROW + player_index
+        standings_row_num = base + TOUR_STANDINGS_ROW + player_index
         standings_row = _pad_row([], width)
         pred_first = _prediction_row_for(player_index, 0, layout)
         pred_last = _prediction_row_for(player_index, matches_per_player - 1, layout)
@@ -439,12 +425,8 @@ def _build_standings_and_predictions(
 
                 _set_cell(row, start, _match_label(match))
 
-                try:
-                    absolute_index = matches.index(match)
-                except ValueError:
-                    absolute_index = match_index
-                schedule_row, schedule_half, schedule_score_cols = (
-                    _schedule_coords_for_match(absolute_index, base)
+                schedule_row, schedule_score_cols = schedule_coords.get(
+                    match.id, (SCHEDULE_FIRST_MATCH_ROW, (start + 1, start + 2))
                 )
 
                 if include_predictions:
@@ -555,34 +537,55 @@ async def build_stage1_sheet_rows(
             total_groups = 1
 
         num_groups = max(len(group_players), 2)
-        width = _last_col(num_groups)
         max_players = max((len(players) for players in group_players), default=0)
         matches_per_player = MATCHES_PER_HALF
         block_height = _tour_block_height(max_players, matches_per_player)
 
-        summary_height = _summary_height(max_players)
-        tour_bases = [
-            summary_height + index * block_height for index in range(len(tours))
-        ]
+        # блоки колонок: расписание — по числу туров, зачёт — по числу групп
+        num_blocks = max(num_groups, len(tours))
+        width = _last_col(num_blocks)
 
         current_number = current_tour.number or 1
         rows_map: dict[int, list] = {}
         layouts: list[Stage1Layout] = []
 
+        # 1) Расписание всех туров по горизонтали
+        tours_matches = [
+            (tour.number or (index + 1), matches_by_tour.get(tour.id, []))
+            for index, tour in enumerate(tours)
+        ]
+        schedule_rows, schedule_coords, schedule_end = _build_schedule_section(
+            tours_matches, width
+        )
+        rows_map.update(schedule_rows)
+
+        # 2) Общий зачёт под расписанием
         summary: SummaryLayout | None = None
-        if summary_height and group_players:
-            rows_map.update(
-                _build_summary_section(
-                    group_players, width, max_players, tour_bases
-                )
-            )
+        if max_players and group_players:
             summary = SummaryLayout(
                 width=width,
                 num_groups=num_groups,
                 max_players=max_players,
                 num_tours=len(tours),
+                label_row=schedule_end + SECTION_GAP + 1,
+                header_row=schedule_end + SECTION_GAP + 2,
+                first_player_row=schedule_end + SECTION_GAP + 3,
+            )
+            summary_end = summary.first_player_row + max_players - 1
+            first_base = summary_end + SECTION_GAP
+        else:
+            first_base = schedule_end + SECTION_GAP
+
+        tour_bases = [first_base + index * block_height for index in range(len(tours))]
+
+        if summary:
+            rows_map.update(
+                _build_summary_section(
+                    group_players, width, max_players, tour_bases, summary
+                )
             )
 
+        # 3) Секции «N ТУР» с таблицами по группам
         for index, tour in enumerate(tours):
             base = tour_bases[index]
             tour_matches = matches_by_tour.get(tour.id, [])
@@ -595,13 +598,6 @@ async def build_stage1_sheet_rows(
             else:
                 include_for_tour = (tour.number or 0) <= current_number
 
-            rows_map.update(_build_schedule_section(tour_matches, width, base))
-            for row_num in range(
-                base + SCHEDULE_FIRST_MATCH_ROW + MATCHES_PER_HALF,
-                base + SECTION_HEADER_ROW,
-            ):
-                rows_map.setdefault(row_num, _pad_row([], width))
-
             standings_rows, layout = _build_standings_and_predictions(
                 group_players,
                 tournament,
@@ -611,6 +607,7 @@ async def build_stage1_sheet_rows(
                 width,
                 include_for_tour,
                 tour_matches,
+                schedule_coords,
                 base=base,
                 tour_number=tour.number or (index + 1),
                 split_matches=bool(
@@ -794,8 +791,9 @@ def _column_width_requests(sheet_id: int, layout: Stage1Layout) -> list[dict]:
             }
         }
     ]
-    for group_index in range(layout.num_groups):
-        block_start = _group_start_col(group_index) - 1
+    num_blocks = _num_blocks_from_width(layout.width)
+    for block_index in range(num_blocks):
+        block_start = _group_start_col(block_index) - 1
         for offset, width in enumerate(BLOCK_COL_WIDTHS):
             requests.append(
                 {
@@ -814,13 +812,38 @@ def _column_width_requests(sheet_id: int, layout: Stage1Layout) -> list[dict]:
     return requests
 
 
+def _schedule_format_requests(
+    sheet_id: int, width: int, num_tours: int
+) -> list[dict]:
+    last_col = _group_start_col(num_tours) - 1
+    return [
+        {
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": SCHEDULE_HEADER_ROW - 1,
+                    "endRowIndex": SCHEDULE_HEADER_ROW,
+                    "startColumnIndex": _group_start_col(0) - 1,
+                    "endColumnIndex": last_col,
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "horizontalAlignment": "CENTER",
+                        "textFormat": {"bold": True, "fontSize": 12},
+                    }
+                },
+                "fields": "userEnteredFormat(horizontalAlignment,textFormat)",
+            }
+        }
+    ]
+
+
 def _tour_format_requests(sheet_id: int, layout: Stage1Layout) -> list[dict]:
     requests: list[dict] = []
     last_col_index = layout.width
     base = layout.base_row
-    section_row = base + SECTION_HEADER_ROW
-    group_row = base + GROUP_HEADER_ROW
-    schedule_row = base + SCHEDULE_HEADER_ROW
+    section_row = base + TOUR_SECTION_ROW
+    group_row = base + TOUR_GROUP_ROW
 
     requests.append(
         {
@@ -855,27 +878,6 @@ def _tour_format_requests(sheet_id: int, layout: Stage1Layout) -> list[dict]:
                 },
                 "cell": {"userEnteredFormat": {"textFormat": {"bold": True, "fontSize": 12}}},
                 "fields": "userEnteredFormat.textFormat",
-            }
-        }
-    )
-
-    requests.append(
-        {
-            "repeatCell": {
-                "range": {
-                    "sheetId": sheet_id,
-                    "startRowIndex": schedule_row - 1,
-                    "endRowIndex": schedule_row,
-                    "startColumnIndex": _group_start_col(0) - 1,
-                    "endColumnIndex": last_col_index,
-                },
-                "cell": {
-                    "userEnteredFormat": {
-                        "horizontalAlignment": "CENTER",
-                        "textFormat": {"bold": True},
-                    }
-                },
-                "fields": "userEnteredFormat(horizontalAlignment,textFormat)",
             }
         }
     )
@@ -917,8 +919,8 @@ def _summary_format_requests(sheet_id: int, summary: SummaryLayout) -> list[dict
             "repeatCell": {
                 "range": {
                     "sheetId": sheet_id,
-                    "startRowIndex": SUMMARY_LABEL_ROW - 1,
-                    "endRowIndex": SUMMARY_LABEL_ROW,
+                    "startRowIndex": summary.label_row - 1,
+                    "endRowIndex": summary.label_row,
                     "startColumnIndex": 0,
                     "endColumnIndex": summary.width,
                 },
@@ -935,8 +937,8 @@ def _summary_format_requests(sheet_id: int, summary: SummaryLayout) -> list[dict
             "repeatCell": {
                 "range": {
                     "sheetId": sheet_id,
-                    "startRowIndex": SUMMARY_HEADER_ROW - 1,
-                    "endRowIndex": SUMMARY_HEADER_ROW,
+                    "startRowIndex": summary.header_row - 1,
+                    "endRowIndex": summary.header_row,
                     "startColumnIndex": _group_start_col(0) - 1,
                     "endColumnIndex": summary.width,
                 },
@@ -952,7 +954,7 @@ def _summary_format_requests(sheet_id: int, summary: SummaryLayout) -> list[dict
     ]
 
     if summary.max_players and summary.num_tours:
-        last_player_row = SUMMARY_FIRST_PLAYER_ROW + summary.max_players - 1
+        last_player_row = summary.first_player_row + summary.max_players - 1
         for group_index in range(summary.num_groups):
             total_col_index = _group_start_col(group_index) + summary.num_tours
             requests.append(
@@ -960,7 +962,7 @@ def _summary_format_requests(sheet_id: int, summary: SummaryLayout) -> list[dict
                     "repeatCell": {
                         "range": {
                             "sheetId": sheet_id,
-                            "startRowIndex": SUMMARY_FIRST_PLAYER_ROW - 1,
+                            "startRowIndex": summary.first_player_row - 1,
                             "endRowIndex": last_player_row,
                             "startColumnIndex": total_col_index,
                             "endColumnIndex": total_col_index + 1,
@@ -986,6 +988,9 @@ def _formatting_requests(
     if not layouts:
         return []
     requests = _column_width_requests(sheet_id, layouts[0])
+    requests.extend(
+        _schedule_format_requests(sheet_id, layouts[0].width, len(layouts))
+    )
     if summary:
         requests.extend(_summary_format_requests(sheet_id, summary))
     for layout in layouts:
