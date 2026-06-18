@@ -14,15 +14,21 @@ from bot.utils.google_oauth import get_oauth_credentials, oauth_is_configured
 from bot.utils.common import get_tour
 from bot.utils.match_groups import (
     MATCHES_PER_HALF,
-    get_matches_for_player,
-    get_tour_matches_sorted,
+    player_predicts_first_half,
 )
 from bot.utils.utils_match import tour_has_started, tour_starts_at
 from bot.utils.utils_tournament import get_tournament
 from db.crud.group_history import crud_group_history
 from db.crud.tournament import crud_tournament
 from db.db import get_async_session
-from db.models import Match, MatchPrediction, Player, Tournament, TournamentPrediction
+from db.models import (
+    Match,
+    MatchPrediction,
+    Player,
+    Tour,
+    Tournament,
+    TournamentPrediction,
+)
 from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
@@ -59,6 +65,9 @@ WHITE = {"red": 1.0, "green": 1.0, "blue": 1.0}
 FORMULA_SEP = ";"
 
 
+TOUR_BLOCK_GAP = 4
+
+
 @dataclass
 class Stage1Layout:
     width: int
@@ -67,10 +76,18 @@ class Stage1Layout:
     num_groups: int
     predictions_start_row: int
     player_block_gap: int = PLAYER_BLOCK_GAP
+    base_row: int = 0
 
 
 def _player_block_height(matches_per_player: int, gap: int = PLAYER_BLOCK_GAP) -> int:
     return matches_per_player + gap
+
+
+def _tour_block_height(max_players: int, matches_per_player: int) -> int:
+    """Высота одного блока тура (строк), включая разрыв до следующего тура."""
+    predictions_start = STANDINGS_START_ROW + max_players + STANDINGS_TO_PREDICTIONS_GAP
+    predictions_rows = max_players * _player_block_height(matches_per_player)
+    return predictions_start + predictions_rows + TOUR_BLOCK_GAP
 
 
 async def should_include_predictions(tournament: Tournament) -> bool:
@@ -138,10 +155,12 @@ def _schedule_score_cols(half_index: int) -> tuple[int, int]:
     return start + 1, start + 2
 
 
-def _schedule_coords_for_match(absolute_index: int) -> tuple[int, int, tuple[int, int]]:
+def _schedule_coords_for_match(
+    absolute_index: int, base: int = 0
+) -> tuple[int, int, tuple[int, int]]:
     half_index = 0 if absolute_index < MATCHES_PER_HALF else 1
     slot = absolute_index % MATCHES_PER_HALF
-    schedule_row = SCHEDULE_FIRST_MATCH_ROW + slot
+    schedule_row = base + SCHEDULE_FIRST_MATCH_ROW + slot
     return schedule_row, half_index, _schedule_score_cols(half_index)
 
 
@@ -189,20 +208,36 @@ def _diff_formula(
     )
 
 
+def _player_tour_matches(
+    player: Player,
+    tour_matches: list[Match],
+    total_groups: int,
+    split: bool,
+) -> list[Match]:
+    """Матчи конкретного тура, которые прогнозирует игрок (с учётом группы)."""
+    if not split:
+        return tour_matches
+    if not player.group:
+        return []
+    if player_predicts_first_half(player, total_groups):
+        return tour_matches[:MATCHES_PER_HALF]
+    return tour_matches[MATCHES_PER_HALF : MATCHES_PER_HALF * 2]
+
+
 def _build_schedule_section(
-    matches: list[Match], width: int
+    matches: list[Match], width: int, base: int = 0
 ) -> dict[int, list]:
-    rows: dict[int, list] = {1: _pad_row([], width)}
+    rows: dict[int, list] = {base + 1: _pad_row([], width)}
 
     header = _pad_row([], width)
     if matches[:MATCHES_PER_HALF]:
         _set_cell(header, _schedule_half_col(0), HALF_LABELS[0])
     if len(matches) > MATCHES_PER_HALF:
         _set_cell(header, _schedule_half_col(1), HALF_LABELS[1])
-    rows[SCHEDULE_HEADER_ROW] = header
+    rows[base + SCHEDULE_HEADER_ROW] = header
 
     for slot in range(MATCHES_PER_HALF):
-        row_num = SCHEDULE_FIRST_MATCH_ROW + slot
+        row_num = base + SCHEDULE_FIRST_MATCH_ROW + slot
         row = _pad_row([], width)
         for half_index in range(2):
             match_index = half_index * MATCHES_PER_HALF + slot
@@ -229,37 +264,34 @@ def _build_standings_and_predictions(
     width: int,
     include_predictions: bool,
     matches: list[Match],
+    *,
+    base: int = 0,
+    tour_number: int = 1,
+    split_matches: bool = True,
+    matches_per_player: int = MATCHES_PER_HALF,
+    max_players: int = 0,
 ) -> tuple[dict[int, list], Stage1Layout]:
     rows: dict[int, list] = {}
     num_groups = len(group_players) or 1
-    max_players = max((len(players) for players in group_players), default=0)
-    matches_per_player = MATCHES_PER_HALF
-    if group_players and group_players[0]:
-        sample = get_matches_for_player(group_players[0][0], tournament, total_groups)
-        if sample:
-            matches_per_player = len(sample)
 
     layout = Stage1Layout(
         width=width,
         max_standings_rows=max_players,
         matches_per_player=matches_per_player,
         num_groups=num_groups,
-        predictions_start_row=STANDINGS_START_ROW
+        predictions_start_row=base
+        + STANDINGS_START_ROW
         + max_players
         + STANDINGS_TO_PREDICTIONS_GAP,
+        base_row=base,
     )
     exact_points = tournament.exact_score_points if tournament.exact_score_points is not None else 3
     diff_points = tournament.difference_points if tournament.difference_points is not None else 2
     outcome_points = tournament.results_points if tournament.results_points is not None else 1
 
     section_row = _pad_row([], width)
-    tour_number = (
-        tournament.current_tour.number
-        if tournament.current_tour and tournament.current_tour.number
-        else 1
-    )
     _set_cell(section_row, 1, f"{tour_number} ТУР")
-    rows[SECTION_HEADER_ROW] = section_row
+    rows[base + SECTION_HEADER_ROW] = section_row
 
     group_header = _pad_row([], width)
     for group_index in range(num_groups):
@@ -269,10 +301,19 @@ def _build_standings_and_predictions(
             _set_cell(group_header, start + 2, "Бомбардир")
         if tournament.best_assistant:
             _set_cell(group_header, start + 3, "Ассистент")
-    rows[GROUP_HEADER_ROW] = group_header
+    rows[base + GROUP_HEADER_ROW] = group_header
+
+    player_matches_cache: dict[int, list[Match]] = {}
+
+    def matches_for(player: Player) -> list[Match]:
+        if player.id not in player_matches_cache:
+            player_matches_cache[player.id] = _player_tour_matches(
+                player, matches, total_groups, split_matches
+            )
+        return player_matches_cache[player.id]
 
     for player_index in range(max_players):
-        standings_row_num = STANDINGS_START_ROW + player_index
+        standings_row_num = base + STANDINGS_START_ROW + player_index
         standings_row = _pad_row([], width)
         pred_first = _prediction_row_for(player_index, 0, layout)
         pred_last = _prediction_row_for(player_index, matches_per_player - 1, layout)
@@ -310,9 +351,7 @@ def _build_standings_and_predictions(
                 if player_index >= len(players):
                     continue
                 player = players[player_index]
-                player_matches = get_matches_for_player(
-                    player, tournament, total_groups
-                )
+                player_matches = matches_for(player)
                 if match_index >= len(player_matches):
                     continue
 
@@ -332,7 +371,7 @@ def _build_standings_and_predictions(
                 except ValueError:
                     absolute_index = match_index
                 schedule_row, schedule_half, schedule_score_cols = (
-                    _schedule_coords_for_match(absolute_index)
+                    _schedule_coords_for_match(absolute_index, base)
                 )
 
                 if include_predictions:
@@ -385,26 +424,44 @@ def _rows_dict_to_list(rows: dict[int, list], width: int) -> list[list]:
     return [rows.get(index, _pad_row([], width)) for index in range(1, max_row + 1)]
 
 
+async def _load_tournament_tours(session, tournament_id: int) -> list[Tour]:
+    result = await session.execute(
+        select(Tour)
+        .where(Tour.tournament_id == tournament_id)
+        .order_by(Tour.number)
+    )
+    return list(result.scalars())
+
+
 async def build_stage1_sheet_rows(
     tournament: Tournament, *, include_predictions: bool
-) -> tuple[list[list], Stage1Layout | None]:
+) -> tuple[list[list], list[Stage1Layout]]:
     async for session in get_async_session():
         tournament = await crud_tournament.get_tournament(tournament.id, session)
-        tour = tournament.current_tour
-        if not tour:
-            return [["Матчи тура ещё не установлены"]], None
+        current_tour = tournament.current_tour
+        if not current_tour:
+            return [["Матчи тура ещё не установлены"]], []
+
+        tours = await _load_tournament_tours(session, tournament.id)
+
+        matches_by_tour: dict[int, list[Match]] = {}
+        for match in tournament.matches:
+            matches_by_tour.setdefault(match.tour_id, []).append(match)
+        for tour_matches in matches_by_tour.values():
+            tour_matches.sort(key=lambda m: m.id)
+
+        # только туры, в которых есть матчи; по возрастанию номера
+        tours = [t for t in tours if matches_by_tour.get(t.id)]
+        if not tours:
+            return [["Матчи тура ещё не установлены"]], []
 
         group_history = await crud_group_history.get_last_group_history(
             tournament.id, session
-        )
-        predictions_by_player = await _load_match_predictions_by_player(
-            session, tournament.id, tour.id
         )
         extras_by_player = await _load_tournament_extras_by_player(
             session, tournament.id
         )
 
-        matches = get_tour_matches_sorted(tournament)
         player_map = {
             player.id: player
             for player in tournament.players
@@ -415,32 +472,65 @@ async def build_stage1_sheet_rows(
             group_players = _sorted_group_players(
                 group_history.group_distribution, player_map
             )
+            total_groups = len(group_history.group_distribution)
         else:
             players = sorted(
                 player_map.values(),
                 key=lambda player: (-player.points, player.user.name or ""),
             )
             group_players = [players] if players else []
+            total_groups = 1
 
         num_groups = max(len(group_players), 2)
         width = _last_col(num_groups)
+        max_players = max((len(players) for players in group_players), default=0)
+        matches_per_player = MATCHES_PER_HALF
+        block_height = _tour_block_height(max_players, matches_per_player)
 
-        rows_map = _build_schedule_section(matches, width)
-        for row_num in range(SCHEDULE_FIRST_MATCH_ROW + MATCHES_PER_HALF, SECTION_HEADER_ROW):
-            rows_map.setdefault(row_num, _pad_row([], width))
+        current_number = current_tour.number or 1
+        rows_map: dict[int, list] = {}
+        layouts: list[Stage1Layout] = []
 
-        standings_rows, layout = _build_standings_and_predictions(
-            group_players,
-            tournament,
-            len(group_history.group_distribution) if group_history else 1,
-            predictions_by_player,
-            extras_by_player,
-            width,
-            include_predictions,
-            matches,
-        )
-        rows_map.update(standings_rows)
-        return _rows_dict_to_list(rows_map, width), layout
+        for index, tour in enumerate(tours):
+            base = index * block_height
+            tour_matches = matches_by_tour.get(tour.id, [])
+            predictions_by_player = await _load_match_predictions_by_player(
+                session, tournament.id, tour.id
+            )
+            # прошедшие туры показываем всегда, текущий — по флагу
+            if tour.id == current_tour.id:
+                include_for_tour = include_predictions
+            else:
+                include_for_tour = (tour.number or 0) <= current_number
+
+            rows_map.update(_build_schedule_section(tour_matches, width, base))
+            for row_num in range(
+                base + SCHEDULE_FIRST_MATCH_ROW + MATCHES_PER_HALF,
+                base + SECTION_HEADER_ROW,
+            ):
+                rows_map.setdefault(row_num, _pad_row([], width))
+
+            standings_rows, layout = _build_standings_and_predictions(
+                group_players,
+                tournament,
+                total_groups,
+                predictions_by_player,
+                extras_by_player,
+                width,
+                include_for_tour,
+                tour_matches,
+                base=base,
+                tour_number=tour.number or (index + 1),
+                split_matches=bool(
+                    getattr(tour, "split_matches_by_groups", True)
+                ),
+                matches_per_player=matches_per_player,
+                max_players=max_players,
+            )
+            rows_map.update(standings_rows)
+            layouts.append(layout)
+
+        return _rows_dict_to_list(rows_map, width), layouts
 
 
 async def _load_tournament_extras_by_player(
@@ -597,11 +687,8 @@ def _resolve_sheet_title(sheets_service, spreadsheet_id: str, preferred_name: st
     return preferred_name
 
 
-def _formatting_requests(sheet_id: int, layout: Stage1Layout) -> list[dict]:
-    requests: list[dict] = []
-    last_col_index = layout.width
-
-    requests.append(
+def _column_width_requests(sheet_id: int, layout: Stage1Layout) -> list[dict]:
+    requests: list[dict] = [
         {
             "updateDimensionProperties": {
                 "range": {
@@ -614,7 +701,7 @@ def _formatting_requests(sheet_id: int, layout: Stage1Layout) -> list[dict]:
                 "fields": "pixelSize",
             }
         }
-    )
+    ]
     for group_index in range(layout.num_groups):
         block_start = _group_start_col(group_index) - 1
         for offset, width in enumerate(BLOCK_COL_WIDTHS):
@@ -632,14 +719,24 @@ def _formatting_requests(sheet_id: int, layout: Stage1Layout) -> list[dict]:
                     }
                 }
             )
+    return requests
+
+
+def _tour_format_requests(sheet_id: int, layout: Stage1Layout) -> list[dict]:
+    requests: list[dict] = []
+    last_col_index = layout.width
+    base = layout.base_row
+    section_row = base + SECTION_HEADER_ROW
+    group_row = base + GROUP_HEADER_ROW
+    schedule_row = base + SCHEDULE_HEADER_ROW
 
     requests.append(
         {
             "repeatCell": {
                 "range": {
                     "sheetId": sheet_id,
-                    "startRowIndex": SECTION_HEADER_ROW - 1,
-                    "endRowIndex": SECTION_HEADER_ROW,
+                    "startRowIndex": section_row - 1,
+                    "endRowIndex": section_row,
                     "startColumnIndex": 0,
                     "endColumnIndex": last_col_index,
                 },
@@ -659,8 +756,8 @@ def _formatting_requests(sheet_id: int, layout: Stage1Layout) -> list[dict]:
             "repeatCell": {
                 "range": {
                     "sheetId": sheet_id,
-                    "startRowIndex": GROUP_HEADER_ROW - 1,
-                    "endRowIndex": GROUP_HEADER_ROW,
+                    "startRowIndex": group_row - 1,
+                    "endRowIndex": group_row,
                     "startColumnIndex": _group_start_col(0) - 1,
                     "endColumnIndex": last_col_index,
                 },
@@ -675,8 +772,8 @@ def _formatting_requests(sheet_id: int, layout: Stage1Layout) -> list[dict]:
             "repeatCell": {
                 "range": {
                     "sheetId": sheet_id,
-                    "startRowIndex": SCHEDULE_HEADER_ROW - 1,
-                    "endRowIndex": SCHEDULE_HEADER_ROW,
+                    "startRowIndex": schedule_row - 1,
+                    "endRowIndex": schedule_row,
                     "startColumnIndex": _group_start_col(0) - 1,
                     "endColumnIndex": last_col_index,
                 },
@@ -722,12 +819,21 @@ def _formatting_requests(sheet_id: int, layout: Stage1Layout) -> list[dict]:
     return requests
 
 
+def _formatting_requests(sheet_id: int, layouts: list[Stage1Layout]) -> list[dict]:
+    if not layouts:
+        return []
+    requests = _column_width_requests(sheet_id, layouts[0])
+    for layout in layouts:
+        requests.extend(_tour_format_requests(sheet_id, layout))
+    return requests
+
+
 def _write_sheet_rows(
     sheets_service,
     spreadsheet_id: str,
     sheet_title: str,
     rows: list[list],
-    layout: Stage1Layout | None,
+    layouts: list[Stage1Layout] | None,
 ) -> None:
     sheet_id = _get_sheet_id(sheets_service, spreadsheet_id, sheet_title)
 
@@ -749,8 +855,8 @@ def _write_sheet_rows(
         body={"values": padded_rows},
     ).execute()
 
-    if layout:
-        requests = _formatting_requests(sheet_id, layout)
+    if layouts:
+        requests = _formatting_requests(sheet_id, layouts)
         if requests:
             sheets_service.spreadsheets().batchUpdate(
                 spreadsheetId=spreadsheet_id,
@@ -759,7 +865,7 @@ def _write_sheet_rows(
 
 
 def _create_spreadsheet_sync(
-    title: str, rows: list[list], layout: Stage1Layout | None
+    title: str, rows: list[list], layouts: list[Stage1Layout] | None
 ) -> str:
     config = load_config()
     credentials = _get_credentials()
@@ -811,7 +917,7 @@ def _create_spreadsheet_sync(
         },
     ).execute()
 
-    _write_sheet_rows(sheets_service, spreadsheet_id, "Стадия 1", rows, layout)
+    _write_sheet_rows(sheets_service, spreadsheet_id, "Стадия 1", rows, layouts)
 
     if config.google.share_email:
         drive_service.permissions().create(
@@ -831,13 +937,13 @@ def _update_spreadsheet_sync(
     spreadsheet_id: str,
     sheet_name: str,
     rows: list[list],
-    layout: Stage1Layout | None,
+    layouts: list[Stage1Layout] | None,
 ) -> str:
     credentials = _get_credentials()
     sheets_service = build("sheets", "v4", credentials=credentials, cache_discovery=False)
     spreadsheet_id = _parse_spreadsheet_id(spreadsheet_id)
     sheet_title = _resolve_sheet_title(sheets_service, spreadsheet_id, sheet_name)
-    _write_sheet_rows(sheets_service, spreadsheet_id, sheet_title, rows, layout)
+    _write_sheet_rows(sheets_service, spreadsheet_id, sheet_title, rows, layouts)
     return _spreadsheet_url(spreadsheet_id)
 
 
@@ -846,7 +952,7 @@ async def sync_google_spreadsheet(
 ) -> str:
     if include_predictions is None:
         include_predictions = await should_include_predictions(tournament)
-    rows, layout = await build_stage1_sheet_rows(
+    rows, layouts = await build_stage1_sheet_rows(
         tournament, include_predictions=include_predictions
     )
     config = load_config()
@@ -856,14 +962,14 @@ async def sync_google_spreadsheet(
             config.google.spreadsheet_id,
             config.google.spreadsheet_sheet_name,
             rows,
-            layout,
+            layouts,
         )
 
     tour = await get_tour(tournament)
     title = f"{tournament.name} — тур {tour.number if tour else '?'}"
     timestamp = datetime.now().strftime("%d.%m.%Y %H:%M")
     return await asyncio.to_thread(
-        _create_spreadsheet_sync, f"{title} ({timestamp})", rows, layout
+        _create_spreadsheet_sync, f"{title} ({timestamp})", rows, layouts
     )
 
 
