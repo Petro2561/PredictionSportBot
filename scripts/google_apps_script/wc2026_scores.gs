@@ -8,18 +8,23 @@
  * 4. Запустить один раз installTrigger() — обновление каждые 5 минут.
  * 5. Для проверки: updateWorldCupScores()
  *
- * Ячейки (как в боте):
- *   Матчи 1–12:  B3:B14 — название, C/D — счёт
- *   Матчи 13–24: I3:I14 — название, J/K — счёт
+ * Раскладка листа (как в боте):
+ *   Строка 2 — заголовки «Тур 1», «Тур 2», … в начале блоков (B, I, P, …).
+ *   Под каждым заголовком — матчи тура в одной колонке, счёт в двух соседних
+ *   колонках (B→C/D, I→J/K, P→Q/R и т.д.). Между 1-й и 2-й половиной матчей —
+ *   одна пустая строка. Скрипт сам находит блоки и границу расписания
+ *   (останавливается, когда в колонке A появляется «ОБЩИЙ ЗАЧЁТ» / «N ТУР»).
  */
 
 const CONFIG = {
   SHEET_NAME: 'Стадия 1',
+  SCHEDULE_HEADER_ROW: 2,
   FIRST_MATCH_ROW: 3,
-  MATCHES_PER_HALF: 12,
+  MAX_SCAN_ROWS: 40, // предохранитель на случай, если колонка A пустая
+  MAX_BLOCK_COLS: 60, // докуда искать заголовки «Тур N» в строке 2
   // Оставьте пустым, если токен задан через setApiToken()
   FOOTBALL_DATA_TOKEN: '',
-  API_URL: 'https://api.football-data.org/v4/competitions/WC/matches?season=2026&matchday=1',
+  API_URL: 'https://api.football-data.org/v4/competitions/WC/matches?season=2026',
 };
 
 /** Русские / альтернативные названия → как в football-data.org */
@@ -139,18 +144,48 @@ function updateWorldCupScores() {
   const apiMatches = fetchApiMatches_(token);
   const scoreMap = buildScoreMap_(apiMatches);
 
-  let updated = 0;
-  for (let slot = 0; slot < CONFIG.MATCHES_PER_HALF; slot++) {
-    const row = CONFIG.FIRST_MATCH_ROW + slot;
-    updated += updateRowHalf_(sheet, row, 'B', 'C', 'D', scoreMap);
-    updated += updateRowHalf_(sheet, row, 'I', 'J', 'K', scoreMap);
+  const blocks = findTourBlocks_(sheet);
+  if (!blocks.length) {
+    throw new Error('Не найдены заголовки «Тур N» в строке ' + CONFIG.SCHEDULE_HEADER_ROW);
   }
+
+  let updated = 0;
+  blocks.forEach(function (block) {
+    const lastRow = CONFIG.FIRST_MATCH_ROW + CONFIG.MAX_SCAN_ROWS;
+    for (let row = CONFIG.FIRST_MATCH_ROW; row <= lastRow; row++) {
+      // граница расписания: ниже начинаются «ОБЩИЙ ЗАЧЁТ» / «N ТУР» (колонка A)
+      const aCell = String(sheet.getRange(row, 1).getValue() || '').trim();
+      if (aCell) break;
+      updated += updateRow_(
+        sheet, row, block.labelCol, block.score1Col, block.score2Col, scoreMap
+      );
+    }
+  });
 
   sheet.getRange('A1').setNote(
     'Счёт обновлён: ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd.MM.yyyy HH:mm:ss') +
     ' (матчей: ' + updated + ')'
   );
-  Logger.log('Обновлено ячеек счёта: ' + updated);
+  Logger.log('Обновлено ячеек счёта: ' + updated + ' (туров: ' + blocks.length + ')');
+}
+
+/** Находит блоки туров по заголовкам «Тур N» в строке расписания. */
+function findTourBlocks_(sheet) {
+  const headerValues = sheet
+    .getRange(CONFIG.SCHEDULE_HEADER_ROW, 1, 1, CONFIG.MAX_BLOCK_COLS)
+    .getValues()[0];
+  const blocks = [];
+  headerValues.forEach(function (value, index) {
+    if (/^\s*Тур\b/i.test(String(value || ''))) {
+      const labelCol = index + 1; // 1-based
+      blocks.push({
+        labelCol: labelCol,
+        score1Col: labelCol + 1,
+        score2Col: labelCol + 2,
+      });
+    }
+  });
+  return blocks;
 }
 
 function fetchApiMatches_(token) {
@@ -184,8 +219,8 @@ function buildScoreMap_(apiMatches) {
   return map;
 }
 
-function updateRowHalf_(sheet, row, labelCol, score1Col, score2Col, scoreMap) {
-  const label = String(sheet.getRange(labelCol + row).getValue() || '').trim();
+function updateRow_(sheet, row, labelCol, score1Col, score2Col, scoreMap) {
+  const label = String(sheet.getRange(row, labelCol).getValue() || '').trim();
   if (!label) return 0;
 
   const teams = parseMatchLabel_(label);
@@ -194,8 +229,8 @@ function updateRowHalf_(sheet, row, labelCol, score1Col, score2Col, scoreMap) {
   const found = lookupScore_(scoreMap, teams[0], teams[1]);
   if (!found) return 0;
 
-  sheet.getRange(score1Col + row).setValue(found.home);
-  sheet.getRange(score2Col + row).setValue(found.away);
+  sheet.getRange(row, score1Col).setValue(found.home);
+  sheet.getRange(row, score2Col).setValue(found.away);
   return 1;
 }
 

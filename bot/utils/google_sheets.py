@@ -45,6 +45,8 @@ GROUP_BLOCK_WIDTH = 7
 SCHEDULE_BLANK_ROW = 1
 SCHEDULE_HEADER_ROW = 2
 SCHEDULE_FIRST_MATCH_ROW = 3
+# пустая строка между 1-й и 2-й половиной матчей тура (после MATCHES_PER_HALF)
+SCHEDULE_HALF_GAP = 1
 
 # Блок одного тура (таблица + прогнозы), смещения относительно base = верх блока − 1
 TOUR_SECTION_ROW = 1  # «N ТУР»
@@ -293,13 +295,15 @@ def _build_schedule_section(
     coords: dict[int, tuple[int, tuple[int, int]]] = {}
 
     header = _pad_row([], width)
-    max_matches = 0
+    schedule_end = SCHEDULE_FIRST_MATCH_ROW
     for block_index, (tour_number, matches) in enumerate(tours_matches):
         start = _group_start_col(block_index)
         _set_cell(header, start, f"Тур {tour_number}")
-        max_matches = max(max_matches, len(matches))
         for match_index, match in enumerate(matches):
-            row_num = SCHEDULE_FIRST_MATCH_ROW + match_index
+            row_num = SCHEDULE_FIRST_MATCH_ROW + match_index + (
+                SCHEDULE_HALF_GAP if match_index >= MATCHES_PER_HALF else 0
+            )
+            schedule_end = max(schedule_end, row_num)
             row = rows.get(row_num)
             if row is None:
                 row = _pad_row([], width)
@@ -312,7 +316,6 @@ def _build_schedule_section(
             coords[match.id] = (row_num, (score1_col, score2_col))
     rows[SCHEDULE_HEADER_ROW] = header
 
-    schedule_end = SCHEDULE_FIRST_MATCH_ROW + max(max_matches, 1) - 1
     return rows, coords, schedule_end
 
 
@@ -1026,13 +1029,22 @@ def _write_sheet_rows(
         body={"values": padded_rows},
     ).execute()
 
+    # сбрасываем старое форматирование всего листа (values().clear() его не трогает)
+    requests: list[dict] = [
+        {
+            "repeatCell": {
+                "range": {"sheetId": sheet_id},
+                "cell": {"userEnteredFormat": {}},
+                "fields": "userEnteredFormat",
+            }
+        }
+    ]
     if layouts:
-        requests = _formatting_requests(sheet_id, layouts, summary)
-        if requests:
-            sheets_service.spreadsheets().batchUpdate(
-                spreadsheetId=spreadsheet_id,
-                body={"requests": requests},
-            ).execute()
+        requests.extend(_formatting_requests(sheet_id, layouts, summary))
+    sheets_service.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={"requests": requests},
+    ).execute()
 
 
 def _create_spreadsheet_sync(
