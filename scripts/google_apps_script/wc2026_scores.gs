@@ -1,112 +1,46 @@
 /**
- * ЧМ-2026: автоматическое обновление счёта на листе «Стадия 1».
+ * ЧМ-2026: счёт с championat.com → лист «Стадия 1»
  *
- * Установка:
- * 1. Google Таблица → Расширения → Apps Script → вставить этот файл.
- * 2. Зарегистрироваться на https://www.football-data.org/client/register (бесплатно).
- * 3. Запустить один раз setApiToken('ВАШ_ТОКЕН') или задать FOOTBALL_DATA_TOKEN ниже.
- * 4. Запустить один раз installTrigger() — обновление каждые 5 минут.
- * 5. Для проверки: updateWorldCupScores()
+ * 1. Вставить в Apps Script
+ * 2. installTrigger() — раз
+ * 3. updateWorldCupScores() — проверка
+ * 4. debugChampionatParse() — отладка
  *
  * Раскладка листа (как в боте):
  *   Строка 2 — заголовки «Тур 1», «Тур 2», … в начале блоков (B, I, P, …).
- *   Под каждым заголовком — матчи тура в одной колонке, счёт в двух соседних
- *   колонках (B→C/D, I→J/K, P→Q/R и т.д.). Между 1-й и 2-й половиной матчей —
- *   одна пустая строка. Скрипт сам находит блоки и границу расписания
- *   (останавливается, когда в колонке A появляется «ОБЩИЙ ЗАЧЁТ» / «N ТУР»).
+ *   Под каждым заголовком — матчи тура в одной колонке; слева от названия —
+ *   дата матча (B→A, I→H, P→O …), а счёт в двух колонках справа (B→C/D …).
+ *   Между 1-й и 2-й половиной матчей — одна пустая строка. Скрипт сам находит
+ *   блоки и границу расписания (две пустые строки подряд = конец расписания,
+ *   дальше идут «ОБЩИЙ ЗАЧЁТ» / «N ТУР»).
  */
 
 const CONFIG = {
   SHEET_NAME: 'Стадия 1',
   SCHEDULE_HEADER_ROW: 2,
   FIRST_MATCH_ROW: 3,
-  MAX_SCAN_ROWS: 40, // предохранитель на случай, если колонка A пустая
+  MAX_SCAN_ROWS: 40, // предохранитель на число строк расписания
+  STOP_AFTER_BLANK_ROWS: 2, // столько пустых строк подряд = конец расписания
   MAX_BLOCK_COLS: 60, // докуда искать заголовки «Тур N» в строке 2
-  // Оставьте пустым, если токен задан через setApiToken()
-  FOOTBALL_DATA_TOKEN: '',
-  API_URL: 'https://api.football-data.org/v4/competitions/WC/matches?season=2026',
+  CALENDAR_URL: 'https://www.championat.com/football/_worldcup/tournament/6858/calendar/',
+  // Туры, которые скрипт НЕ трогает (счёт/даты не перезаписывает). Групповой этап
+  // завершён, поэтому 1–3 заморожены; активным остаётся плей-офф (Тур 4 = 1/16 финала).
+  FROZEN_TOURS: [1, 2, 3],
 };
 
-/** Русские / альтернативные названия → как в football-data.org */
+/**
+ * Алиасы названий. Ключи и значения — в КАНОНИЧЕСКОМ виде
+ * (нижний регистр, ё→е, без апострофов/дефисов/пробелов), как их делает
+ * normalizeTeam_. Например «Кот-д'Ивуар» → «котдивуар», «Кабо-Верде» → «кабоверде»
+ * совпадают сами по себе независимо от вида апострофа/дефиса.
+ */
 const TEAM_ALIASES = {
-  'мексика': 'mexico',
-  'юар': 'south africa',
-  'южная корея': 'korea republic',
-  'корея': 'korea republic',
-  'чехия': 'czechia',
-  'канада': 'canada',
-  'босния и герцеговина': 'bosnia-herzegovina',
-  'сша': 'united states',
-  'парагвай': 'paraguay',
-  'катар': 'qatar',
-  'швейцария': 'switzerland',
-  'бразилия': 'brazil',
-  'марокко': 'morocco',
-  'гаити': 'haiti',
-  'шотландия': 'scotland',
-  'австралия': 'australia',
-  'турция': 'turkey',
-  'германия': 'germany',
-  'кюрасао': 'curacao',
-  'нидерланды': 'netherlands',
-  'голландия': 'netherlands',
-  'япония': 'japan',
-  "кот-д'ивуар": 'ivory coast',
-  'кот дивуар': 'ivory coast',
-  'эквадор': 'ecuador',
-  'швеция': 'sweden',
-  'тунис': 'tunisia',
-  'испания': 'spain',
-  'кабо-верде': 'cape verde',
-  'бельгия': 'belgium',
-  'египет': 'egypt',
-  'саудовская аравия': 'saudi arabia',
-  'уругвай': 'uruguay',
-  'иран': 'iran',
-  'новая зеландия': 'new zealand',
-  'франция': 'france',
-  'сенегал': 'senegal',
-  'ирак': 'iraq',
-  'норвегия': 'norway',
-  'аргентина': 'argentina',
-  'алжир': 'algeria',
-  'австрия': 'austria',
-  'иордания': 'jordan',
-  'португалия': 'portugal',
-  'др конго': 'congo dr',
-  'конго др': 'congo dr',
-  'англия': 'england',
-  'хорватия': 'croatia',
-  'гана': 'ghana',
-  'панама': 'panama',
-  'узбекистан': 'uzbekistan',
-  'колумбия': 'colombia',
-  // английские варианты из старой БД
-  'korea republic': 'korea republic',
-  'czechia': 'czechia',
-  'czech republic': 'czechia',
-  'united states': 'united states',
-  'usa': 'united states',
-  'bosnia and herzegovina': 'bosnia-herzegovina',
-  "côte d'ivoire": 'ivory coast',
-  'cote divoire': 'ivory coast',
-  'curaçao': 'curacao',
-  'curacao': 'curacao',
-  'cabo verde': 'cape verde',
-  'cape verde': 'cape verde',
-  'congo dr': 'congo dr',
-  'dr congo': 'congo dr',
+  'южнаяафрика': 'юар',
+  'корея': 'южнаякорея',
+  'соединенныештаты': 'сша',
+  'голландия': 'нидерланды',
+  'конгодр': 'дрконго',
 };
-
-function setApiToken(token) {
-  PropertiesService.getScriptProperties().setProperty('FOOTBALL_DATA_TOKEN', token);
-  Logger.log('Токен сохранён в свойствах скрипта.');
-}
-
-function getApiToken_() {
-  const fromProps = PropertiesService.getScriptProperties().getProperty('FOOTBALL_DATA_TOKEN');
-  return (CONFIG.FOOTBALL_DATA_TOKEN || fromProps || '').trim();
-}
 
 function installTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (trigger) {
@@ -118,7 +52,7 @@ function installTrigger() {
     .timeBased()
     .everyMinutes(5)
     .create();
-  Logger.log('Триггер: updateWorldCupScores каждые 5 минут.');
+  Logger.log('Триггер каждые 5 минут установлен.');
 }
 
 function uninstallTrigger() {
@@ -127,128 +61,300 @@ function uninstallTrigger() {
       ScriptApp.deleteTrigger(trigger);
     }
   });
-  Logger.log('Триггер удалён.');
 }
 
 function updateWorldCupScores() {
-  const token = getApiToken_();
-  if (!token) {
-    throw new Error('Задайте токен: setApiToken("...") или CONFIG.FOOTBALL_DATA_TOKEN');
-  }
+  Logger.log('=== updateWorldCupScores START ===');
 
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET_NAME);
   if (!sheet) {
     throw new Error('Лист «' + CONFIG.SHEET_NAME + '» не найден');
   }
 
-  const apiMatches = fetchApiMatches_(token);
-  const scoreMap = buildScoreMap_(apiMatches);
+  const html = fetchCalendarHtml_();
+  const parseResult = parseChampionatCalendar_(html);
+  const scoreMap = parseResult.map;
+
+  Logger.log('Championat: строк матчей=' + parseResult.totalRows +
+    ', со счётом=' + parseResult.withScore +
+    ', без счёта=' + parseResult.withoutScore);
 
   const blocks = findTourBlocks_(sheet);
   if (!blocks.length) {
     throw new Error('Не найдены заголовки «Тур N» в строке ' + CONFIG.SCHEDULE_HEADER_ROW);
   }
+  Logger.log('Найдено блоков туров: ' + blocks.length +
+    ' (' + blocks.map(function (b) { return b.title; }).join(', ') + ')');
 
-  let updated = 0;
+  let updatedScores = 0;
+  let updatedDates = 0;
+  let notFound = 0;
+  let frozenSkipped = 0;
+
+  const logFn = function (msg) {
+    Logger.log(msg);
+    if (msg.indexOf('НЕ НАЙДЕНО') >= 0) notFound++;
+  };
+
+  const frozenTours = CONFIG.FROZEN_TOURS || [];
+
+  // граница расписания: STOP_AFTER_BLANK_ROWS пустых строк подряд в колонке тура.
+  // Промежуток между половинами — 1 пустая строка, поэтому не обрывает цикл.
   blocks.forEach(function (block) {
-    const lastRow = CONFIG.FIRST_MATCH_ROW + CONFIG.MAX_SCAN_ROWS;
-    for (let row = CONFIG.FIRST_MATCH_ROW; row <= lastRow; row++) {
-      // граница расписания: ниже начинаются «ОБЩИЙ ЗАЧЁТ» / «N ТУР» (колонка A)
-      const aCell = String(sheet.getRange(row, 1).getValue() || '').trim();
-      if (aCell) break;
-      updated += updateRow_(
-        sheet, row, block.labelCol, block.score1Col, block.score2Col, scoreMap
+    // замороженные туры (завершённый групповой этап) не трогаем вообще:
+    // ни счёт, ни даты — оставляем как есть, чтобы их нельзя было затереть.
+    if (block.number != null && frozenTours.indexOf(block.number) >= 0) {
+      frozenSkipped++;
+      Logger.log('Тур ' + block.number + ' заморожен (FROZEN_TOURS) — пропускаю.');
+      return;
+    }
+    let blankRun = 0;
+    for (let i = 0; i < CONFIG.MAX_SCAN_ROWS; i++) {
+      const row = CONFIG.FIRST_MATCH_ROW + i;
+      const label = String(sheet.getRange(row, block.labelCol).getValue() || '').trim();
+      if (!label) {
+        blankRun++;
+        if (blankRun >= CONFIG.STOP_AFTER_BLANK_ROWS) break;
+        continue;
+      }
+      blankRun = 0;
+      const res = updateRow_(
+        sheet, row, block.labelCol, block.dateCol, block.score1Col, block.score2Col,
+        scoreMap, logFn
       );
+      updatedScores += res.score;
+      updatedDates += res.date;
     }
   });
 
+  const summary =
+    'Обновлено счётов: ' + updatedScores + '\n' +
+    'Обновлено дат: ' + updatedDates + '\n' +
+    'Туров на листе: ' + blocks.length + '\n' +
+    'Заморожено туров: ' + frozenSkipped + ' (' + frozenTours.join(', ') + ')\n' +
+    'Championat матчей: ' + parseResult.totalRows + '\n' +
+    'Со счётом: ' + parseResult.withScore + '\n' +
+    'В scoreMap: ' + Object.keys(scoreMap).length + '\n' +
+    'Не найдено: ' + notFound;
+
   sheet.getRange('A1').setNote(
-    'Счёт обновлён: ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd.MM.yyyy HH:mm:ss') +
-    ' (матчей: ' + updated + ')'
+    Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd.MM.yyyy HH:mm:ss') +
+    '\n' + summary
   );
-  Logger.log('Обновлено ячеек счёта: ' + updated + ' (туров: ' + blocks.length + ')');
+
+  Logger.log('--- Итог ---');
+  Logger.log(summary);
+  Logger.log('=== END ===');
 }
 
 /** Находит блоки туров по заголовкам «Тур N» в строке расписания. */
 function findTourBlocks_(sheet) {
-  const headerValues = sheet
+  const header = sheet
     .getRange(CONFIG.SCHEDULE_HEADER_ROW, 1, 1, CONFIG.MAX_BLOCK_COLS)
     .getValues()[0];
   const blocks = [];
-  headerValues.forEach(function (value, index) {
-    if (/^\s*Тур\b/i.test(String(value || ''))) {
-      const labelCol = index + 1; // 1-based
+  for (let i = 0; i < header.length; i++) {
+    const text = String(header[i] || '').trim();
+    // важно: \b в JS не работает с кириллицей, поэтому проверяем префикс
+    if (text.toLowerCase().indexOf('тур') === 0) {
+      const labelCol = i + 1; // 1-based
+      const numMatch = text.match(/(\d+)/);
       blocks.push({
         labelCol: labelCol,
+        dateCol: labelCol - 1, // дата слева от названий (B→A, I→H, P→O …)
         score1Col: labelCol + 1,
         score2Col: labelCol + 2,
+        title: text,
+        number: numMatch ? parseInt(numMatch[1], 10) : null,
       });
     }
-  });
+  }
   return blocks;
 }
 
-function fetchApiMatches_(token) {
-  const response = UrlFetchApp.fetch(CONFIG.API_URL, {
+function debugChampionatParse() {
+  const html = fetchCalendarHtml_();
+  Logger.log('HTML length: ' + html.length);
+
+  const result = parseChampionatCalendar_(html);
+  Logger.log('Всего строк: ' + result.totalRows);
+  Logger.log('Со счётом: ' + result.withScore);
+  Logger.log('Без счёта: ' + result.withoutScore);
+
+  result.matches.forEach(function (m, i) {
+    Logger.log(
+      (i + 1) + '. ' + m.home + ' — ' + m.away +
+      ' | ' + (m.scoreText || 'нет счёта') +
+      ' | ' + (m.dateText || 'нет даты') +
+      ' | played=' + m.played +
+      ' | tour=' + m.tour + ' | ' + m.group
+    );
+  });
+
+  Logger.log('--- scoreMap keys ---');
+  Object.keys(result.map).forEach(function (k) {
+    const v = result.map[k];
+    Logger.log(k + ' → ' + v.home + ':' + v.away + ' | ' + (v.date || '—'));
+  });
+}
+
+function fetchCalendarHtml_() {
+  const response = UrlFetchApp.fetch(CONFIG.CALENDAR_URL, {
     muteHttpExceptions: true,
-    headers: { 'X-Auth-Token': token },
+    followRedirects: true,
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; PredictionSportBot/1.0)',
+      'Accept-Language': 'ru-RU,ru;q=0.9',
+    },
   });
   const code = response.getResponseCode();
-  const body = response.getContentText();
   if (code !== 200) {
-    throw new Error('football-data.org HTTP ' + code + ': ' + body.substring(0, 300));
+    throw new Error('Championat HTTP ' + code);
   }
-  const data = JSON.parse(body);
-  return data.matches || [];
+  return response.getContentText('UTF-8');
 }
 
-function buildScoreMap_(apiMatches) {
+function parseChampionatCalendar_(html) {
   const map = {};
-  apiMatches.forEach(function (match) {
-    if (!match.score || match.score.fullTime == null) return;
-    if (match.status !== 'FINISHED' && match.status !== 'IN_PLAY' && match.status !== 'PAUSED') {
-      return;
+  const matches = [];
+  let totalRows = 0;
+  let withScore = 0;
+  let withoutScore = 0;
+
+  const rowRe = /<tr\b[^>]*class="[^"]*stat-results__row[^"]*"[^>]*>([\s\S]*?)<\/tr>/gi;
+  let rowMatch;
+
+  while ((rowMatch = rowRe.exec(html)) !== null) {
+    const rowHtml = rowMatch[0];
+    const rowBody = rowMatch[1];
+    totalRows++;
+
+    const playedMatch = rowHtml.match(/data-played="(\d+)"/);
+    const played = playedMatch ? playedMatch[1] === '1' : false;
+
+    const groupMatch = rowBody.match(/stat-results__group[^>]*>([^<]+)</);
+    const tourMatch = rowBody.match(/stat-results__tour-num[^>]*>([^<]+)</);
+    const group = groupMatch ? groupMatch[1].trim() : '';
+    const tour = tourMatch ? tourMatch[1].trim() : '';
+
+    const names = [];
+    const nameRe = /<span class="table-item__name">([^<]+)<\/span>/gi;
+    let nameMatch;
+    while ((nameMatch = nameRe.exec(rowBody)) !== null) {
+      names.push(nameMatch[1].trim());
     }
-    const home = normalizeTeam_(match.homeTeam.name);
-    const away = normalizeTeam_(match.awayTeam.name);
-    const h = match.score.fullTime.home;
-    const a = match.score.fullTime.away;
-    if (h == null || a == null) return;
-    map[pairKey_(home, away)] = { home: h, away: a, sheetHome: home, sheetAway: away };
-  });
-  return map;
+    if (names.length < 2) continue;
+
+    const home = normalizeTeam_(names[0]);
+    const away = normalizeTeam_(names[1]);
+
+    const scoreMatch = rowBody.match(/stat-results__count-main">\s*([^<]+?)\s*<\/span>/);
+    const scoreText = scoreMatch ? scoreMatch[1].trim() : '';
+    const parsedScore = parseScoreText_(scoreText);
+
+    const dateText = parseDateText_(rowBody);
+
+    const item = {
+      home: names[0],
+      away: names[1],
+      homeKey: home,
+      awayKey: away,
+      scoreText: scoreText,
+      dateText: dateText,
+      played: played,
+      group: group,
+      tour: tour,
+    };
+    matches.push(item);
+
+    // дату пишем для всех матчей (даже будущих, без счёта)
+    map[pairKey_(home, away)] = {
+      home: parsedScore ? parsedScore.home : null,
+      away: parsedScore ? parsedScore.away : null,
+      date: dateText,
+      played: played,
+      source: 'championat',
+    };
+
+    if (parsedScore) {
+      withScore++;
+    } else {
+      withoutScore++;
+    }
+  }
+
+  return { map: map, matches: matches, totalRows: totalRows, withScore: withScore, withoutScore: withoutScore };
 }
 
-function updateRow_(sheet, row, labelCol, score1Col, score2Col, scoreMap) {
+/** Дата + время матча («11.06.2026 22:00»), либо только дата, либо ''. */
+function parseDateText_(rowBody) {
+  const dateMatch = rowBody.match(/(\d{2}\.\d{2}\.\d{4})/);
+  if (!dateMatch) return '';
+  // время в отдельном теге, поэтому ищем HH:MM отдельно (счёт «2 : 0» не подходит)
+  const timeMatch = rowBody.match(/([01]\d|2[0-3]):([0-5]\d)/);
+  return timeMatch ? dateMatch[1] + ' ' + timeMatch[0] : dateMatch[1];
+}
+
+function parseScoreText_(text) {
+  if (!text) return null;
+  const cleaned = text.replace(/\u2013|\u2014|–|—/g, '-').trim();
+  if (/^[-–—\s:]+$/.test(cleaned)) return null;
+
+  const m = cleaned.match(/(\d+)\s*:\s*(\d+)/);
+  if (!m) return null;
+  return { home: parseInt(m[1], 10), away: parseInt(m[2], 10) };
+}
+
+function updateRow_(sheet, row, labelCol, dateCol, score1Col, score2Col, scoreMap, logFn) {
+  const cellRef = columnLetter_(labelCol) + row;
+  const result = { score: 0, date: 0 };
+
   const label = String(sheet.getRange(row, labelCol).getValue() || '').trim();
-  if (!label) return 0;
+  if (!label) return result; // пустая строка (в т.ч. промежуток между половинами)
 
   const teams = parseMatchLabel_(label);
-  if (!teams) return 0;
+  if (!teams) {
+    if (logFn) logFn(cellRef + ': не распарсилось → «' + label + '»');
+    return result;
+  }
 
-  const found = lookupScore_(scoreMap, teams[0], teams[1]);
-  if (!found) return 0;
+  const found = lookupMatch_(scoreMap, teams[0], teams[1]);
+  if (!found) {
+    if (logFn) logFn(cellRef + ': «' + label + '» → НЕ НАЙДЕНО [' + teams[0] + '|' + teams[1] + ']');
+    return result;
+  }
 
-  sheet.getRange(row, score1Col).setValue(found.home);
-  sheet.getRange(row, score2Col).setValue(found.away);
-  return 1;
+  if (found.date && dateCol >= 1) {
+    sheet.getRange(row, dateCol).setValue(found.date);
+    result.date = 1;
+  }
+
+  if (found.home != null && found.away != null) {
+    sheet.getRange(row, score1Col).setValue(found.home);
+    sheet.getRange(row, score2Col).setValue(found.away);
+    result.score = 1;
+    if (logFn) logFn(cellRef + ': «' + label + '» → ' + found.home + ':' + found.away +
+      (found.date ? ' (' + found.date + ')' : ''));
+  } else if (logFn) {
+    logFn(cellRef + ': «' + label + '» → дата ' + (found.date || '—') + ', счёта нет');
+  }
+
+  return result;
 }
 
 function parseMatchLabel_(label) {
-  const parts = label.split(/\s*[–\-]\s*/);
+  // разделитель команд — тире С ПРОБЕЛАМИ вокруг; внутренние дефисы
+  // в названиях («Кот-д'Ивуар», «Кабо-Верде») не трогаем
+  const parts = label.split(/\s+[–—-]\s+/);
   if (parts.length !== 2) return null;
   return [normalizeTeam_(parts[0]), normalizeTeam_(parts[1])];
 }
 
-function lookupScore_(scoreMap, home, away) {
+function lookupMatch_(scoreMap, home, away) {
   const direct = scoreMap[pairKey_(home, away)];
-  if (direct) {
-    return { home: direct.home, away: direct.away };
-  }
+  if (direct) return { home: direct.home, away: direct.away, date: direct.date };
   const reverse = scoreMap[pairKey_(away, home)];
-  if (reverse) {
-    return { home: reverse.away, away: reverse.home };
-  }
+  if (reverse) return { home: reverse.away, away: reverse.home, date: reverse.date };
   return null;
 }
 
@@ -256,17 +362,24 @@ function pairKey_(a, b) {
   return a + '|' + b;
 }
 
+function columnLetter_(index) {
+  let letters = '';
+  while (index > 0) {
+    const remainder = (index - 1) % 26;
+    letters = String.fromCharCode(65 + remainder) + letters;
+    index = Math.floor((index - 1) / 26);
+  }
+  return letters;
+}
+
 function normalizeTeam_(name) {
   let n = String(name || '')
     .trim()
     .toLowerCase()
     .replace(/ё/g, 'е')
-    .replace(/\s+/g, ' ');
-  n = n.replace(/[çãáàâäéèêëíìîïóòôöúùûüñ]/g, function (c) {
-    const map = { ç: 'c', ã: 'a', á: 'a', à: 'a', â: 'a', ä: 'a', é: 'e', è: 'e', ê: 'e', ë: 'e',
-      í: 'i', ì: 'i', î: 'i', ï: 'i', ó: 'o', ò: 'o', ô: 'o', ö: 'o', ú: 'u', ù: 'u', û: 'u', ü: 'u', ñ: 'n' };
-    return map[c] || c;
-  });
+    .replace(/[’ʼ`´'‘]/g, '') // апострофы любого вида
+    .replace(/[–—−-]/g, '')    // дефисы/тире любого вида
+    .replace(/\s+/g, '');      // пробелы
   if (TEAM_ALIASES[n]) return TEAM_ALIASES[n];
   return n;
 }

@@ -541,8 +541,18 @@ async def build_stage1_sheet_rows(
 
         num_groups = max(len(group_players), 2)
         max_players = max((len(players) for players in group_players), default=0)
-        matches_per_player = MATCHES_PER_HALF
-        block_height = _tour_block_height(max_players, matches_per_player)
+        # сколько матчей прогнозирует один игрок в каждом туре: для туров с делением
+        # по группам — половина (12), для недробящихся (плей-офф) — все матчи тура.
+        def _tour_matches_per_player(tour: Tour) -> int:
+            tour_matches = matches_by_tour.get(tour.id, [])
+            if bool(getattr(tour, "split_matches_by_groups", True)):
+                return MATCHES_PER_HALF
+            return max(len(tour_matches), 1)
+
+        tour_matches_per_player = [_tour_matches_per_player(tour) for tour in tours]
+        tour_heights = [
+            _tour_block_height(max_players, mpp) for mpp in tour_matches_per_player
+        ]
 
         # блоки колонок: расписание — по числу туров, зачёт — по числу групп
         num_blocks = max(num_groups, len(tours))
@@ -579,7 +589,11 @@ async def build_stage1_sheet_rows(
         else:
             first_base = schedule_end + SECTION_GAP
 
-        tour_bases = [first_base + index * block_height for index in range(len(tours))]
+        tour_bases = []
+        running_base = first_base
+        for height in tour_heights:
+            tour_bases.append(running_base)
+            running_base += height
 
         if summary:
             rows_map.update(
@@ -616,7 +630,7 @@ async def build_stage1_sheet_rows(
                 split_matches=bool(
                     getattr(tour, "split_matches_by_groups", True)
                 ),
-                matches_per_player=matches_per_player,
+                matches_per_player=tour_matches_per_player[index],
                 max_players=max_players,
             )
             rows_map.update(standings_rows)
