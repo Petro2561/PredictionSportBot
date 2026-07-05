@@ -71,6 +71,23 @@ TOUR_BLOCK_GAP = 4
 SECTION_GAP = 2
 SUMMARY_LABEL = "ОБЩИЙ ЗАЧЁТ"
 
+# Стадия 2 (плей-офф) — как в «Лига прогнозов Qatar 2022», лист «Стадия 2»
+STAGE2_PLAYER_BLOCK_GAP = 1
+STAGE2_ROUND_GAP = 3
+STAGE2_SECTION_GAP = 2
+STAGE2_ROUND_TITLE_ROW = 1
+STAGE2_GROUP_ROW = 2
+STAGE2_STANDINGS_ROW = 3
+STAGE2_PREDICTIONS_GAP = 1
+PLAYOFF_ROUND_LABELS = {
+    16: "1/16 финала",
+    8: "1/8 финала",
+    4: "1/4 финала",
+    2: "1/2 финала",
+    1: "Финал",
+}
+ROUND_TITLE_COLOR = {"red": 0.92, "green": 0.6, "blue": 0.6}
+
 
 @dataclass
 class Stage1Layout:
@@ -92,6 +109,18 @@ class SummaryLayout:
     label_row: int
     header_row: int
     first_player_row: int
+
+
+@dataclass
+class Stage2RoundLayout:
+    width: int
+    num_groups: int
+    max_players: int
+    matches_per_player: int
+    predictions_start_row: int
+    base_row: int
+    round_label: str
+    show_player_names: bool
 
 
 def _num_blocks_from_width(width: int) -> int:
@@ -155,6 +184,39 @@ def _match_label(match: Match) -> str:
 def _group_header_label(group_index: int) -> str:
     suffix = GROUP_HEADER_SUFFIXES[group_index]
     return f"Группа {suffix}"
+
+
+def _playoff_round_label(match_count: int, tour_number: int) -> str:
+    return PLAYOFF_ROUND_LABELS.get(match_count, f"Тур {tour_number}")
+
+
+def _is_playoff_tour(tour: Tour) -> bool:
+    return not bool(getattr(tour, "split_matches_by_groups", True))
+
+
+def _stage2_predictions_start_offset(max_players: int) -> int:
+    return STAGE2_STANDINGS_ROW + max_players + STAGE2_PREDICTIONS_GAP
+
+
+def _stage2_player_block_height(num_matches: int) -> int:
+    return num_matches + STAGE2_PLAYER_BLOCK_GAP
+
+
+def _stage2_round_height(max_players: int, num_matches: int) -> int:
+    predictions_start = _stage2_predictions_start_offset(max_players)
+    return (
+        predictions_start
+        - 1
+        + max_players * _stage2_player_block_height(num_matches)
+        + STAGE2_ROUND_GAP
+    )
+
+
+def _stage2_prediction_row(
+    player_index: int, match_index: int, predictions_start: int, num_matches: int
+) -> int:
+    block_height = _stage2_player_block_height(num_matches)
+    return predictions_start + player_index * block_height + match_index
 
 
 def _column_letter(index: int) -> str:
@@ -317,6 +379,184 @@ def _build_schedule_section(
     rows[SCHEDULE_HEADER_ROW] = header
 
     return rows, coords, schedule_end
+
+
+def _build_stage2_schedule_section(
+    rounds_matches: list[tuple[str, list[Match]]],
+    width: int,
+) -> tuple[dict[int, list], dict[int, tuple[int, tuple[int, int]]], int]:
+    """Расписание плей-офф: 1/8, 1/4, … по горизонтали (как в Qatar 2022)."""
+    rows: dict[int, list] = {SCHEDULE_BLANK_ROW: _pad_row([], width)}
+    coords: dict[int, tuple[int, tuple[int, int]]] = {}
+
+    header = _pad_row([], width)
+    schedule_end = SCHEDULE_FIRST_MATCH_ROW
+    for block_index, (round_label, matches) in enumerate(rounds_matches):
+        start = _group_start_col(block_index)
+        _set_cell(header, start, round_label)
+        for match_index, match in enumerate(matches):
+            row_num = SCHEDULE_FIRST_MATCH_ROW + match_index
+            schedule_end = max(schedule_end, row_num)
+            row = rows.get(row_num)
+            if row is None:
+                row = _pad_row([], width)
+                rows[row_num] = row
+            score1_col, score2_col = start + 1, start + 2
+            _set_cell(row, start, _match_label(match))
+            if match.first_team_score is not None:
+                _set_cell(row, score1_col, match.first_team_score)
+                _set_cell(row, score2_col, match.second_team_score)
+            coords[match.id] = (row_num, (score1_col, score2_col))
+    rows[SCHEDULE_HEADER_ROW] = header
+
+    return rows, coords, schedule_end
+
+
+def _build_stage2_round_section(
+    group_players: list[list[Player]],
+    tournament: Tournament,
+    round_label: str,
+    tour_matches: list[Match],
+    schedule_coords: dict[int, tuple[int, tuple[int, int]]],
+    predictions_by_player: dict[int, dict[int, dict]],
+    width: int,
+    include_predictions: bool,
+    *,
+    base: int = 0,
+    max_players: int = 0,
+) -> tuple[dict[int, list], Stage2RoundLayout]:
+    rows: dict[int, list] = {}
+    num_groups = len(group_players) or 1
+    num_matches = len(tour_matches)
+    show_player_names = num_matches <= 4
+    predictions_start = base + _stage2_predictions_start_offset(max_players)
+
+    layout = Stage2RoundLayout(
+        width=width,
+        num_groups=num_groups,
+        max_players=max_players,
+        matches_per_player=num_matches,
+        predictions_start_row=predictions_start,
+        base_row=base,
+        round_label=round_label,
+        show_player_names=show_player_names,
+    )
+
+    exact_points = (
+        tournament.exact_score_points if tournament.exact_score_points is not None else 3
+    )
+    diff_points = (
+        tournament.difference_points if tournament.difference_points is not None else 2
+    )
+    outcome_points = (
+        tournament.results_points if tournament.results_points is not None else 1
+    )
+
+    title_row = _pad_row([], width)
+    _set_cell(title_row, 1, round_label)
+    rows[base + STAGE2_ROUND_TITLE_ROW] = title_row
+
+    group_header = _pad_row([], width)
+    for group_index in range(num_groups):
+        _set_cell(group_header, _group_start_col(group_index), _group_header_label(group_index))
+    rows[base + STAGE2_GROUP_ROW] = group_header
+
+    for player_index in range(max_players):
+        standings_row_num = base + STAGE2_STANDINGS_ROW + player_index
+        standings_row = _pad_row([], width)
+        pred_first = _stage2_prediction_row(
+            player_index, 0, predictions_start, num_matches
+        )
+        pred_last = _stage2_prediction_row(
+            player_index, num_matches - 1, predictions_start, num_matches
+        )
+
+        for group_index, players in enumerate(group_players):
+            if player_index >= len(players):
+                continue
+            player = players[player_index]
+            start = _group_start_col(group_index)
+            points_col_letter = _column_letter(start + 4)
+            _set_cell(standings_row, start, player.user.name or "")
+            _set_cell(
+                standings_row,
+                start + 1,
+                f"=SUM({points_col_letter}{pred_first}:{points_col_letter}{pred_last})",
+            )
+        rows[standings_row_num] = standings_row
+
+    if not group_players or not num_matches:
+        return rows, layout
+
+    for player_index in range(max_players):
+        for match_index, match in enumerate(tour_matches):
+            pred_row_num = _stage2_prediction_row(
+                player_index, match_index, predictions_start, num_matches
+            )
+            row = _pad_row([], width)
+            wrote_any = False
+
+            for group_index, players in enumerate(group_players):
+                if player_index >= len(players):
+                    continue
+                player = players[player_index]
+                start = _group_start_col(group_index)
+                pred_score_cols = (start + 1, start + 2)
+                diff_col = start + 3
+                points_col = start + 4
+
+                if show_player_names and match_index == 0:
+                    _set_cell(row, 1, player.user.name or "")
+
+                _set_cell(row, start, _match_label(match))
+
+                schedule_row, schedule_score_cols = schedule_coords.get(
+                    match.id, (SCHEDULE_FIRST_MATCH_ROW, (start + 1, start + 2))
+                )
+
+                if include_predictions:
+                    prediction = predictions_by_player.get(player.id, {}).get(match.id)
+                    if prediction:
+                        _set_cell(row, pred_score_cols[0], prediction["s1"])
+                        _set_cell(row, pred_score_cols[1], prediction["s2"])
+
+                _set_cell(
+                    row,
+                    diff_col,
+                    _diff_formula(
+                        pred_row_num,
+                        schedule_row,
+                        pred_score_cols,
+                        schedule_score_cols,
+                        diff_col,
+                    ),
+                )
+                _set_cell(
+                    row,
+                    points_col,
+                    _points_formula(
+                        pred_row_num,
+                        schedule_row,
+                        pred_score_cols,
+                        schedule_score_cols,
+                        diff_col,
+                        exact_points=exact_points,
+                        diff_points=diff_points,
+                        outcome_points=outcome_points,
+                    ),
+                )
+                wrote_any = True
+
+            if wrote_any:
+                rows[pred_row_num] = row
+
+        block_start = _stage2_prediction_row(
+            player_index, 0, predictions_start, num_matches
+        )
+        for gap_index in range(STAGE2_PLAYER_BLOCK_GAP):
+            rows[block_start + num_matches + gap_index] = _pad_row([], width)
+
+    return rows, layout
 
 
 def _build_standings_and_predictions(
@@ -508,8 +748,13 @@ async def build_stage1_sheet_rows(
         for tour_matches in matches_by_tour.values():
             tour_matches.sort(key=lambda m: m.id)
 
-        # только туры, в которых есть матчи; по возрастанию номера
-        tours = [t for t in tours if matches_by_tour.get(t.id)]
+        # только групповой этап (split_matches_by_groups); плей-офф — на «Стадия 2»
+        tours = [
+            t
+            for t in tours
+            if matches_by_tour.get(t.id)
+            and bool(getattr(t, "split_matches_by_groups", True))
+        ]
         if not tours:
             return [["Матчи тура ещё не установлены"]], [], None
 
@@ -637,6 +882,108 @@ async def build_stage1_sheet_rows(
             layouts.append(layout)
 
         return _rows_dict_to_list(rows_map, width), layouts, summary
+
+
+async def build_stage2_sheet_rows(
+    tournament: Tournament, *, include_predictions: bool
+) -> tuple[list[list], list[Stage2RoundLayout]]:
+    """Лист «Стадия 2»: плей-офф (1/16, 1/8, …) — как в Qatar 2022."""
+    async for session in get_async_session():
+        tournament = await crud_tournament.get_tournament(tournament.id, session)
+        current_tour = tournament.current_tour
+
+        tours = await _load_tournament_tours(session, tournament.id)
+
+        matches_by_tour: dict[int, list[Match]] = {}
+        for match in tournament.matches:
+            matches_by_tour.setdefault(match.tour_id, []).append(match)
+        for tour_matches in matches_by_tour.values():
+            tour_matches.sort(key=lambda m: m.id)
+
+        playoff_tours = [
+            t
+            for t in tours
+            if matches_by_tour.get(t.id) and _is_playoff_tour(t)
+        ]
+        if not playoff_tours:
+            return [["Плей-офф ещё не начался"]], []
+
+        group_history = await crud_group_history.get_last_group_history(
+            tournament.id, session
+        )
+
+        player_map = {
+            player.id: player
+            for player in tournament.players
+            if not player.is_eliminated
+        }
+
+        if group_history:
+            group_players = _sorted_group_players(
+                group_history.group_distribution, player_map
+            )
+        else:
+            players = sorted(
+                player_map.values(),
+                key=lambda player: (-player.points, player.user.name or ""),
+            )
+            group_players = [players] if players else []
+
+        num_groups = max(len(group_players), 2)
+        max_players = max((len(players) for players in group_players), default=0)
+
+        rounds_matches = [
+            (
+                _playoff_round_label(
+                    len(matches_by_tour[tour.id]), tour.number or 0
+                ),
+                matches_by_tour[tour.id],
+            )
+            for tour in playoff_tours
+        ]
+
+        num_blocks = max(num_groups, len(rounds_matches))
+        width = _last_col(num_blocks)
+
+        rows_map: dict[int, list] = {}
+        layouts: list[Stage2RoundLayout] = []
+
+        schedule_rows, schedule_coords, schedule_end = _build_stage2_schedule_section(
+            rounds_matches, width
+        )
+        rows_map.update(schedule_rows)
+
+        running_base = schedule_end + STAGE2_SECTION_GAP
+        current_number = current_tour.number or 1 if current_tour else 1
+
+        for tour in playoff_tours:
+            tour_matches = matches_by_tour[tour.id]
+            round_label = _playoff_round_label(len(tour_matches), tour.number or 0)
+            predictions_by_player = await _load_match_predictions_by_player(
+                session, tournament.id, tour.id
+            )
+            if current_tour and tour.id == current_tour.id:
+                include_for_round = include_predictions
+            else:
+                include_for_round = (tour.number or 0) <= current_number
+
+            round_rows, layout = _build_stage2_round_section(
+                group_players,
+                tournament,
+                round_label,
+                tour_matches,
+                schedule_coords,
+                predictions_by_player,
+                width,
+                include_for_round,
+                base=running_base,
+                max_players=max_players,
+            )
+            rows_map.update(round_rows)
+            layouts.append(layout)
+            running_base += _stage2_round_height(max_players, len(tour_matches))
+
+        return _rows_dict_to_list(rows_map, width), layouts
 
 
 async def _load_tournament_extras_by_player(
@@ -791,6 +1138,21 @@ def _resolve_sheet_title(sheets_service, spreadsheet_id: str, preferred_name: st
         },
     ).execute()
     return preferred_name
+
+
+def _ensure_sheet_exists(sheets_service, spreadsheet_id: str, sheet_title: str) -> None:
+    spreadsheet = (
+        sheets_service.spreadsheets()
+        .get(spreadsheetId=spreadsheet_id, fields="sheets.properties")
+        .execute()
+    )
+    for sheet in spreadsheet.get("sheets", []):
+        if sheet["properties"]["title"] == sheet_title:
+            return
+    sheets_service.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={"requests": [{"addSheet": {"properties": {"title": sheet_title}}}]},
+    ).execute()
 
 
 def _column_width_requests(sheet_id: int, layout: Stage1Layout) -> list[dict]:
@@ -997,6 +1359,101 @@ def _summary_format_requests(sheet_id: int, summary: SummaryLayout) -> list[dict
     return requests
 
 
+def _stage2_round_format_requests(sheet_id: int, layout: Stage2RoundLayout) -> list[dict]:
+    requests: list[dict] = []
+    base = layout.base_row
+    title_row = base + STAGE2_ROUND_TITLE_ROW
+    group_row = base + STAGE2_GROUP_ROW
+    last_col_index = layout.width
+
+    requests.append(
+        {
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": title_row - 1,
+                    "endRowIndex": title_row,
+                    "startColumnIndex": 0,
+                    "endColumnIndex": last_col_index,
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "backgroundColor": ROUND_TITLE_COLOR,
+                        "textFormat": {"bold": True, "fontSize": 12},
+                    }
+                },
+                "fields": "userEnteredFormat(backgroundColor,textFormat)",
+            }
+        }
+    )
+
+    requests.append(
+        {
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": group_row - 1,
+                    "endRowIndex": group_row,
+                    "startColumnIndex": _group_start_col(0) - 1,
+                    "endColumnIndex": last_col_index,
+                },
+                "cell": {"userEnteredFormat": {"textFormat": {"bold": True, "fontSize": 12}}},
+                "fields": "userEnteredFormat.textFormat",
+            }
+        }
+    )
+
+    if layout.max_players and layout.matches_per_player:
+        block_height = _stage2_player_block_height(layout.matches_per_player)
+        pred_last_row = (
+            layout.predictions_start_row + layout.max_players * block_height
+        )
+        for group_index in range(layout.num_groups):
+            points_col_index = _group_start_col(group_index) + 3
+            requests.append(
+                {
+                    "repeatCell": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "startRowIndex": layout.predictions_start_row - 1,
+                            "endRowIndex": pred_last_row,
+                            "startColumnIndex": points_col_index,
+                            "endColumnIndex": points_col_index + 1,
+                        },
+                        "cell": {
+                            "userEnteredFormat": {
+                                "backgroundColor": WHITE,
+                                "textFormat": {"fontSize": 11},
+                            }
+                        },
+                        "fields": "userEnteredFormat(backgroundColor,textFormat)",
+                    }
+                }
+            )
+
+    return requests
+
+
+def _stage2_formatting_requests(
+    sheet_id: int, layouts: list[Stage2RoundLayout]
+) -> list[dict]:
+    if not layouts:
+        return []
+    width = layouts[0].width
+    dummy = Stage1Layout(
+        width=width,
+        max_standings_rows=1,
+        matches_per_player=1,
+        num_groups=1,
+        predictions_start_row=1,
+    )
+    requests = _column_width_requests(sheet_id, dummy)
+    requests.extend(_schedule_format_requests(sheet_id, width, len(layouts)))
+    for layout in layouts:
+        requests.extend(_stage2_round_format_requests(sheet_id, layout))
+    return requests
+
+
 def _formatting_requests(
     sheet_id: int,
     layouts: list[Stage1Layout],
@@ -1022,6 +1479,8 @@ def _write_sheet_rows(
     rows: list[list],
     layouts: list[Stage1Layout] | None,
     summary: SummaryLayout | None = None,
+    *,
+    stage2_layouts: list[Stage2RoundLayout] | None = None,
 ) -> None:
     sheet_id = _get_sheet_id(sheets_service, spreadsheet_id, sheet_title)
 
@@ -1055,6 +1514,8 @@ def _write_sheet_rows(
     ]
     if layouts:
         requests.extend(_formatting_requests(sheet_id, layouts, summary))
+    elif stage2_layouts:
+        requests.extend(_stage2_formatting_requests(sheet_id, stage2_layouts))
     sheets_service.spreadsheets().batchUpdate(
         spreadsheetId=spreadsheet_id,
         body={"requests": requests},
@@ -1152,6 +1613,36 @@ def _update_spreadsheet_sync(
     return _spreadsheet_url(spreadsheet_id)
 
 
+def _sync_existing_spreadsheet(
+    spreadsheet_id: str,
+    stage1_name: str,
+    rows1: list[list],
+    layouts1: list[Stage1Layout] | None,
+    summary: SummaryLayout | None,
+    stage2_name: str,
+    rows2: list[list],
+    layouts2: list[Stage2RoundLayout],
+) -> str:
+    credentials = _get_credentials()
+    sheets_service = build("sheets", "v4", credentials=credentials, cache_discovery=False)
+    spreadsheet_id = _parse_spreadsheet_id(spreadsheet_id)
+    _ensure_sheet_exists(sheets_service, spreadsheet_id, stage1_name)
+    _ensure_sheet_exists(sheets_service, spreadsheet_id, stage2_name)
+    sheet1 = _resolve_sheet_title(sheets_service, spreadsheet_id, stage1_name)
+    _write_sheet_rows(
+        sheets_service, spreadsheet_id, sheet1, rows1, layouts1, summary
+    )
+    _write_sheet_rows(
+        sheets_service,
+        spreadsheet_id,
+        stage2_name,
+        rows2,
+        None,
+        stage2_layouts=layouts2,
+    )
+    return _spreadsheet_url(spreadsheet_id)
+
+
 async def sync_google_spreadsheet(
     tournament: Tournament, *, include_predictions: bool | None = None
 ) -> str:
@@ -1160,15 +1651,21 @@ async def sync_google_spreadsheet(
     rows, layouts, summary = await build_stage1_sheet_rows(
         tournament, include_predictions=include_predictions
     )
+    rows2, layouts2 = await build_stage2_sheet_rows(
+        tournament, include_predictions=include_predictions
+    )
     config = load_config()
     if config.google.spreadsheet_id:
         return await asyncio.to_thread(
-            _update_spreadsheet_sync,
+            _sync_existing_spreadsheet,
             config.google.spreadsheet_id,
             config.google.spreadsheet_sheet_name,
             rows,
             layouts,
             summary,
+            config.google.spreadsheet_stage2_sheet_name,
+            rows2,
+            layouts2,
         )
 
     tour = await get_tour(tournament)

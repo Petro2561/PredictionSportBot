@@ -21,6 +21,7 @@ class GoogleSheets:
     drive_folder_id: str | None
     spreadsheet_id: str | None
     spreadsheet_sheet_name: str
+    spreadsheet_stage2_sheet_name: str
     share_email: str | None
     skip_deadline_check: bool
     client_id: str | None
@@ -63,6 +64,9 @@ def load_config(path: str | None = None) -> Config:
             drive_folder_id=env("GOOGLE_DRIVE_FOLDER_ID", None),
             spreadsheet_id=env("GOOGLE_SPREADSHEET_ID", None),
             spreadsheet_sheet_name=env("GOOGLE_SPREADSHEET_SHEET_NAME", "Стадия 1"),
+            spreadsheet_stage2_sheet_name=env(
+                "GOOGLE_SPREADSHEET_STAGE2_SHEET_NAME", "Стадия 2"
+            ),
             share_email=env("GOOGLE_SHEETS_SHARE_EMAIL", None),
             skip_deadline_check=env.bool("GOOGLE_SHEETS_SKIP_DEADLINE", False),
             client_id=env("CLIENT_ID", None) or env("GOOGLE_CLIENT_ID", None),

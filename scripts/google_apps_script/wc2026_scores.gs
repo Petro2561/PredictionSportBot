@@ -42,6 +42,17 @@ const TEAM_ALIASES = {
   'конгодр': 'дрконго',
 };
 
+/**
+ * Зафиксированные счета. Ключ — пара команд в каноническом виде (normalizeTeam_),
+ * порядок как на листе: «Бельгия – Сенегал» → «бельгия|сенегал».
+ * Championat иногда отдаёт неверный результат — здесь задаётся правильный счёт,
+ * который скрипт пишет вместо данных с сайта.
+ */
+const PINNED_SCORES = {
+  'бельгия|сенегал': { home: 2, away: 2 },
+  'аргентина|кабоверде': { home: 1, away: 1 },
+};
+
 function installTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (trigger) {
     if (trigger.getHandlerFunction() === 'updateWorldCupScores') {
@@ -90,6 +101,7 @@ function updateWorldCupScores() {
   let updatedDates = 0;
   let notFound = 0;
   let frozenSkipped = 0;
+  let pinnedScores = 0;
 
   const logFn = function (msg) {
     Logger.log(msg);
@@ -124,12 +136,14 @@ function updateWorldCupScores() {
       );
       updatedScores += res.score;
       updatedDates += res.date;
+      pinnedScores += res.pinned;
     }
   });
 
   const summary =
     'Обновлено счётов: ' + updatedScores + '\n' +
     'Обновлено дат: ' + updatedDates + '\n' +
+    'Закреплённых счётов: ' + pinnedScores + '\n' +
     'Туров на листе: ' + blocks.length + '\n' +
     'Заморожено туров: ' + frozenSkipped + ' (' + frozenTours.join(', ') + ')\n' +
     'Championat матчей: ' + parseResult.totalRows + '\n' +
@@ -307,7 +321,7 @@ function parseScoreText_(text) {
 
 function updateRow_(sheet, row, labelCol, dateCol, score1Col, score2Col, scoreMap, logFn) {
   const cellRef = columnLetter_(labelCol) + row;
-  const result = { score: 0, date: 0 };
+  const result = { score: 0, date: 0, pinned: 0 };
 
   const label = String(sheet.getRange(row, labelCol).getValue() || '').trim();
   if (!label) return result; // пустая строка (в т.ч. промежуток между половинами)
@@ -315,6 +329,24 @@ function updateRow_(sheet, row, labelCol, dateCol, score1Col, score2Col, scoreMa
   const teams = parseMatchLabel_(label);
   if (!teams) {
     if (logFn) logFn(cellRef + ': не распарсилось → «' + label + '»');
+    return result;
+  }
+
+  const pinned = lookupPinnedScore_(teams[0], teams[1]);
+  if (pinned) {
+    const found = lookupMatch_(scoreMap, teams[0], teams[1]);
+    if (found && found.date && dateCol >= 1) {
+      sheet.getRange(row, dateCol).setValue(found.date);
+      result.date = 1;
+    }
+    sheet.getRange(row, score1Col).setValue(pinned.home);
+    sheet.getRange(row, score2Col).setValue(pinned.away);
+    result.score = 1;
+    result.pinned = 1;
+    if (logFn) {
+      logFn(cellRef + ': «' + label + '» → закреплено ' + pinned.home + ':' + pinned.away +
+        ' (Championat игнорируется)');
+    }
     return result;
   }
 
@@ -355,6 +387,14 @@ function lookupMatch_(scoreMap, home, away) {
   if (direct) return { home: direct.home, away: direct.away, date: direct.date };
   const reverse = scoreMap[pairKey_(away, home)];
   if (reverse) return { home: reverse.away, away: reverse.home, date: reverse.date };
+  return null;
+}
+
+function lookupPinnedScore_(home, away) {
+  const direct = PINNED_SCORES[pairKey_(home, away)];
+  if (direct) return { home: direct.home, away: direct.away };
+  const reverse = PINNED_SCORES[pairKey_(away, home)];
+  if (reverse) return { home: reverse.away, away: reverse.home };
   return null;
 }
 
