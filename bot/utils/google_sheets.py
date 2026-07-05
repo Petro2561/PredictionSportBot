@@ -156,7 +156,9 @@ def _group_start_col(group_index: int) -> int:
 
 
 def _last_col(num_groups: int) -> int:
-    return FIRST_GROUP_COL + GROUP_BLOCK_WIDTH * num_groups - 2
+    # Последняя колонка блока = start + 6 (7 колонок в BLOCK_COL_WIDTHS); для num_groups блоков
+    # это FIRST_GROUP_COL + GROUP_BLOCK_WIDTH * num_groups - 1 (1-based).
+    return FIRST_GROUP_COL + GROUP_BLOCK_WIDTH * num_groups - 1
 
 
 def _player_name_col(group_index: int) -> int:
@@ -1170,18 +1172,23 @@ def _column_width_requests(sheet_id: int, layout: Stage1Layout) -> list[dict]:
             }
         }
     ]
+    # layout.width — exclusive end index (колонки 0 … width-1)
+    max_col_index = layout.width
     num_blocks = _num_blocks_from_width(layout.width)
     for block_index in range(num_blocks):
         block_start = _group_start_col(block_index) - 1
         for offset, width in enumerate(BLOCK_COL_WIDTHS):
+            col_index = block_start + offset
+            if col_index >= max_col_index:
+                continue
             requests.append(
                 {
                     "updateDimensionProperties": {
                         "range": {
                             "sheetId": sheet_id,
                             "dimension": "COLUMNS",
-                            "startIndex": block_start + offset,
-                            "endIndex": block_start + offset + 1,
+                            "startIndex": col_index,
+                            "endIndex": col_index + 1,
                         },
                         "properties": {"pixelSize": _excel_width_to_pixels(width)},
                         "fields": "pixelSize",
