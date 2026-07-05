@@ -5,6 +5,23 @@ from db.models import Match, Player, Tournament
 
 MATCHES_PER_HALF = 12
 
+# Матчи, которые должны идти первыми в туре (для всех игроков)
+TOUR_MATCHES_FIRST: list[tuple[str, str]] = [
+    ("Канада", "Марокко"),
+]
+
+
+def _match_sort_key(match: Match) -> tuple[int, int]:
+    teams = {match.first_team, match.second_team}
+    for index, (home, away) in enumerate(TOUR_MATCHES_FIRST):
+        if teams == {home, away}:
+            return index, match.id
+    return len(TOUR_MATCHES_FIRST), match.id
+
+
+def sort_tour_matches(matches: list[Match]) -> None:
+    matches.sort(key=_match_sort_key)
+
 
 def splits_matches_by_groups(tournament: Tournament) -> bool:
     tour = tournament.current_tour
@@ -39,7 +56,7 @@ def get_tour_matches_sorted(tournament: Tournament) -> List[Match]:
         for match in tournament.matches
         if match.tour_id == tournament.current_tour_id
     ]
-    matches.sort(key=lambda match: match.id)
+    sort_tour_matches(matches)
     return matches
 
 
