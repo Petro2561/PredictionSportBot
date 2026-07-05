@@ -90,3 +90,18 @@ def get_latest_session_for_user(telegram_id: int) -> list[MatchPair] | None:
     if not session:
         return None
     return session["matches"]
+
+
+def get_active_session_id(
+    telegram_id: int, *, tournament_id: int | None = None
+) -> str | None:
+    """ID неистёкшей сессии формы прогнозов для пользователя."""
+    session_id = _get_redis().get(_user_key(telegram_id))
+    if not session_id:
+        return None
+    session = get_prediction_session(session_id)
+    if not session:
+        return None
+    if tournament_id is not None and session.get("tournament_id") != tournament_id:
+        return None
+    return session_id

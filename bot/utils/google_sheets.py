@@ -86,6 +86,8 @@ PLAYOFF_ROUND_LABELS = {
     2: "1/2 финала",
     1: "Финал",
 }
+# Стадия 2 — с 1/8 финала (1/16 не синхронизируется ботом)
+STAGE2_MAX_ROUND_MATCHES = 8
 ROUND_TITLE_COLOR = {"red": 0.92, "green": 0.6, "blue": 0.6}
 
 
@@ -194,6 +196,11 @@ def _playoff_round_label(match_count: int, tour_number: int) -> str:
 
 def _is_playoff_tour(tour: Tour) -> bool:
     return not bool(getattr(tour, "split_matches_by_groups", True))
+
+
+def _is_stage2_playoff_tour(tour: Tour, tour_matches: list[Match]) -> bool:
+    """Плей-офф для листа «Стадия 2»: с 1/8 финала (без 1/16)."""
+    return _is_playoff_tour(tour) and len(tour_matches) <= STAGE2_MAX_ROUND_MATCHES
 
 
 def _stage2_predictions_start_offset(max_players: int) -> int:
@@ -889,7 +896,7 @@ async def build_stage1_sheet_rows(
 async def build_stage2_sheet_rows(
     tournament: Tournament, *, include_predictions: bool
 ) -> tuple[list[list], list[Stage2RoundLayout]]:
-    """Лист «Стадия 2»: плей-офф (1/16, 1/8, …) — как в Qatar 2022."""
+    """Лист «Стадия 2»: плей-офф с 1/8 финала (1/4, 1/2, финал) — как в Qatar 2022."""
     async for session in get_async_session():
         tournament = await crud_tournament.get_tournament(tournament.id, session)
         current_tour = tournament.current_tour
@@ -905,10 +912,11 @@ async def build_stage2_sheet_rows(
         playoff_tours = [
             t
             for t in tours
-            if matches_by_tour.get(t.id) and _is_playoff_tour(t)
+            if matches_by_tour.get(t.id)
+            and _is_stage2_playoff_tour(t, matches_by_tour[t.id])
         ]
         if not playoff_tours:
-            return [["Плей-офф ещё не начался"]], []
+            return [["Стадия 2 начнётся с 1/8 финала"]], []
 
         group_history = await crud_group_history.get_last_group_history(
             tournament.id, session
@@ -1622,10 +1630,6 @@ def _update_spreadsheet_sync(
 
 def _sync_existing_spreadsheet(
     spreadsheet_id: str,
-    stage1_name: str,
-    rows1: list[list],
-    layouts1: list[Stage1Layout] | None,
-    summary: SummaryLayout | None,
     stage2_name: str,
     rows2: list[list],
     layouts2: list[Stage2RoundLayout],
@@ -1633,12 +1637,7 @@ def _sync_existing_spreadsheet(
     credentials = _get_credentials()
     sheets_service = build("sheets", "v4", credentials=credentials, cache_discovery=False)
     spreadsheet_id = _parse_spreadsheet_id(spreadsheet_id)
-    _ensure_sheet_exists(sheets_service, spreadsheet_id, stage1_name)
     _ensure_sheet_exists(sheets_service, spreadsheet_id, stage2_name)
-    sheet1 = _resolve_sheet_title(sheets_service, spreadsheet_id, stage1_name)
-    _write_sheet_rows(
-        sheets_service, spreadsheet_id, sheet1, rows1, layouts1, summary
-    )
     _write_sheet_rows(
         sheets_service,
         spreadsheet_id,
@@ -1655,26 +1654,22 @@ async def sync_google_spreadsheet(
 ) -> str:
     if include_predictions is None:
         include_predictions = await should_include_predictions(tournament)
-    rows, layouts, summary = await build_stage1_sheet_rows(
-        tournament, include_predictions=include_predictions
-    )
+    config = load_config()
     rows2, layouts2 = await build_stage2_sheet_rows(
         tournament, include_predictions=include_predictions
     )
-    config = load_config()
     if config.google.spreadsheet_id:
         return await asyncio.to_thread(
             _sync_existing_spreadsheet,
             config.google.spreadsheet_id,
-            config.google.spreadsheet_sheet_name,
-            rows,
-            layouts,
-            summary,
             config.google.spreadsheet_stage2_sheet_name,
             rows2,
             layouts2,
         )
 
+    rows, layouts, summary = await build_stage1_sheet_rows(
+        tournament, include_predictions=include_predictions
+    )
     tour = await get_tour(tournament)
     title = f"{tournament.name} — тур {tour.number if tour else '?'}"
     timestamp = datetime.now().strftime("%d.%m.%Y %H:%M")

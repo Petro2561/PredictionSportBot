@@ -14,6 +14,11 @@ async def get_tournament(id: int) -> Tournament:
         return tournament
 
 
+async def get_tournament_for_menu(id: int) -> Tournament:
+    async for session in get_async_session():
+        return await crud_tournament.get_tournament_for_menu(id, session)
+
+
 def get_all_tournaments(user: User) -> Tournament:
     tournaments = set(user.tournaments)
     for player in user.players:

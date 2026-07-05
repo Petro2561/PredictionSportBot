@@ -40,7 +40,8 @@ from bot.utils.match_groups import (
 from bot.utils.points_results import recalculate_tournament_points
 from bot.utils.utils_match import predictions_allowed, tour_has_started, tour_starts_at
 from bot.utils.utils_tournament import (eleminated_to_front,
-                                        get_all_tournaments, get_tournament)
+                                        get_all_tournaments, get_tournament,
+                                        get_tournament_for_menu)
 from bot.utils.utils_user_player import (ensure_user_in_default_tournament,
                                          get_or_create_player,
                                          get_or_create_user, refresh_user)
@@ -51,12 +52,17 @@ logger = logging.getLogger(__name__)
 
 
 async def enter_tournament_menu(
-    user: User, state: FSMContext, telegram_id: int | None = None
+    user: User,
+    state: FSMContext,
+    telegram_id: int | None = None,
+    *,
+    is_new_player: bool | None = None,
 ) -> tuple[str, InlineKeyboardMarkup | None]:
-    is_new_player = await ensure_user_in_default_tournament(user)
-    refreshed_user = await refresh_user(user.id)
-    if refreshed_user:
-        user = refreshed_user
+    if is_new_player is None:
+        is_new_player = await ensure_user_in_default_tournament(user)
+        refreshed_user = await refresh_user(user.id)
+        if refreshed_user:
+            user = refreshed_user
 
     await state.update_data(user_id=user.id)
     await state.set_state(TournamentMenu.tournament_menu)
@@ -66,15 +72,21 @@ async def enter_tournament_menu(
         return "У вас нет турниров", None
     if len(tournaments) > 1:
         return "Выберите турнир", create_tournament_keyboard(user)
-    tournament = await get_tournament(tournaments[0].id)
-    await state.update_data(tournament_id=tournament.id)
+    tournament = await get_tournament_for_menu(tournaments[0].id)
+    player = next((p for p in tournament.players if p.user_id == user.id), None)
+    if not player:
+        player = await get_or_create_player(
+            {"user_id": user.id, "tournament_id": tournament.id}
+        )
+    await state.update_data(tournament_id=tournament.id, player_id=player.id)
     greeting = f"Вы в турнире {tournament.name}"
     if is_new_player:
         greeting = f"Вы добавлены в турнир «{tournament.name}»"
     return (
         greeting,
         await keyboard_menu(
-            tournament_id=tournament.id,
+            tournament=tournament,
+            player=player,
             user_id=user.id,
             telegram_id=telegram_id,
         ),
@@ -88,14 +100,18 @@ async def process_start_command(message: Message, state: FSMContext):
         await message.answer("Не удалось загрузить профиль. Попробуйте позже.")
         return
 
+    config = load_config()
     is_new_player = await ensure_user_in_default_tournament(user)
     refreshed_user = await refresh_user(user.id)
     if refreshed_user:
         user = refreshed_user
 
-    config = load_config()
     await ensure_tournament_prediction_flags(config.default_tournament_id)
-    tournament = await get_tournament(config.default_tournament_id)
+    tournament = await get_tournament_for_menu(config.default_tournament_id)
+    if not tournament:
+        await message.answer("Турнир не найден.")
+        return
+
     player = await get_or_create_player(
         {"user_id": user.id, "tournament_id": tournament.id}
     )
@@ -111,7 +127,10 @@ async def process_start_command(message: Message, state: FSMContext):
         return
 
     text, reply_markup = await enter_tournament_menu(
-        user, state, telegram_id=message.from_user.id
+        user,
+        state,
+        telegram_id=message.from_user.id,
+        is_new_player=is_new_player,
     )
     await message.answer(text, reply_markup=reply_markup)
 
@@ -457,10 +476,10 @@ async def admin_update_sheet(callback_query: CallbackQuery, state: FSMContext):
 
     tournament = await get_tournament(tournament.id)
     if tour_has_started(tournament):
-        details = "Таблицы обновлены: «Стадия 1» и «Стадия 2» (матчи и прогнозы)."
+        details = "Лист «Стадия 2» обновлён (матчи и прогнозы)."
     else:
         details = (
-            "Таблицы обновлены: «Стадия 1» и «Стадия 2». "
+            "Лист «Стадия 2» обновлён. "
             "Прогнозы появятся после начала тура."
         )
 
@@ -517,7 +536,7 @@ async def get_predictions(callback_query: CallbackQuery, state: FSMContext):
 async def open_prediction_form(callback_query: CallbackQuery, state: FSMContext):
     await callback_query.answer()
     data = await state.get_data()
-    tournament = await get_tournament(data["tournament_id"])
+    tournament = await get_tournament_for_menu(data["tournament_id"])
     if not await predictions_allowed(tournament):
         await callback_query.answer(
             "Приём прогнозов закрыт — тур уже начался или до начала меньше часа.",
@@ -543,7 +562,8 @@ async def open_prediction_form(callback_query: CallbackQuery, state: FSMContext)
     )
     await callback_query.message.edit_reply_markup(
         reply_markup=await keyboard_menu(
-            tournament_id=tournament.id,
+            tournament=tournament,
+            player=player,
             user_id=data["user_id"],
             telegram_id=telegram_id,
         )

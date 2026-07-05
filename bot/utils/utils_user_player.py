@@ -3,7 +3,7 @@ from typing import List
 
 from bot.config import load_config
 from bot.utils.random_distribution import add_player_to_group
-from bot.utils.utils_tournament import get_tournament
+from bot.utils.utils_tournament import get_tournament, get_tournament_for_menu
 from db.crud.player import crud_player
 from db.crud.user import crud_user
 from db.db import get_async_session
@@ -77,7 +77,7 @@ async def refresh_user(user_id: int) -> User | None:
 
 async def ensure_user_in_default_tournament(user: User) -> bool:
     config = load_config()
-    tournament = await get_tournament(config.default_tournament_id)
+    tournament = await get_tournament_for_menu(config.default_tournament_id)
     if not tournament:
         logging.warning("Турнир id=%s не найден", config.default_tournament_id)
         return False

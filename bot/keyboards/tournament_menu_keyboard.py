@@ -3,7 +3,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.config import is_bot_admin, load_config
 from bot.utils.prediction_submit import build_prediction_form_matches
-from bot.webapp_sessions import create_prediction_session
+from bot.webapp_sessions import create_prediction_session, get_active_session_id
 from bot.keyboards.callback_factory import (
     DrawGroupsCallbackFactory,
     MenuCallbackFactory,
@@ -15,7 +15,7 @@ from bot.utils.match_groups import (
     splits_matches_by_groups,
 )
 from bot.utils.utils_match import predictions_allowed, tour_has_started
-from bot.utils.utils_tournament import get_all_tournaments, get_tournament
+from bot.utils.utils_tournament import get_all_tournaments, get_tournament_for_menu
 from bot.utils.random_distribution import add_player_to_group
 from bot.utils.utils_user_player import get_or_create_player
 from db.models import Player, User
@@ -35,13 +35,11 @@ def create_tournament_keyboard(user: User):
 
 
 async def generate_link(
-    tournament, player: Player, telegram_id: int | None = None
+    tournament,
+    player: Player,
+    telegram_id: int | None = None,
 ) -> tuple[str, str | None]:
     config = load_config()
-    tournament = await get_tournament(tournament.id)
-    player = await get_or_create_player(
-        {"user_id": player.user_id, "tournament_id": tournament.id}
-    )
     base_url = config.webapp.url.rstrip("/")
     if not await predictions_allowed(tournament):
         return (
@@ -69,6 +67,13 @@ async def generate_link(
 
     if telegram_id is None and player.user:
         telegram_id = player.user.telegram_id
+    if telegram_id is not None:
+        session_id = get_active_session_id(
+            telegram_id, tournament_id=tournament.id
+        )
+        if session_id:
+            return f"{base_url}/p/{session_id}", None
+
     session_id = create_prediction_session(
         await build_prediction_form_matches(player, tournament),
         telegram_id=telegram_id,
@@ -125,25 +130,30 @@ def draw_groups_count_keyboard(max_groups: int) -> InlineKeyboardMarkup:
     return kb_builder.as_markup()
 
 
-async def keyboard_menu(user_id, tournament_id, telegram_id: int | None = None):
+async def keyboard_menu(
+    user_id,
+    tournament_id=None,
+    *,
+    tournament=None,
+    player=None,
+    telegram_id: int | None = None,
+):
     kb_builder = InlineKeyboardBuilder()
     button_players = InlineKeyboardButton(
         text="Посмотреть список участников",
         callback_data=MenuCallbackFactory(action="show_players").pack(),
     )
-    # button_table = InlineKeyboardButton(
-    #     text="Посмотреть таблицу",
-    #     callback_data=MenuCallbackFactory(action="show_table").pack(),
-    # )
-    tournament = await get_tournament(tournament_id)
-    player = next(
-        (p for p in tournament.players if p.user_id == user_id),
-        None,
-    )
-    if not player:
-        player = await get_or_create_player(
-            {"user_id": user_id, "tournament_id": tournament_id}
+    if tournament is None:
+        tournament = await get_tournament_for_menu(tournament_id)
+    if player is None:
+        player = next(
+            (p for p in tournament.players if p.user_id == user_id),
+            None,
         )
+        if not player:
+            player = await get_or_create_player(
+                {"user_id": user_id, "tournament_id": tournament.id}
+            )
     if tournament.current_tour_id:
         button_show_predictions = InlineKeyboardButton(
             text="Посмотреть прогнозы игроков",

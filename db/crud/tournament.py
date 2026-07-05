@@ -23,5 +23,21 @@ class CRUDTournament(CRUDBase):
         )
         return result.scalars().unique().first()
 
+    async def get_tournament_for_menu(self, id, session):
+        """Облегчённая загрузка для меню: без прогнозов всех игроков."""
+        result = await session.execute(
+            select(self.model)
+            .where(self.model.id == id)
+            .options(
+                joinedload(self.model.current_tour),
+                joinedload(self.model.players).joinedload(Player.user),
+                joinedload(self.model.players).joinedload(
+                    Player.tournament_predictions
+                ),
+                joinedload(self.model.matches).joinedload(Match.tour),
+            )
+        )
+        return result.scalars().unique().first()
+
 
 crud_tournament = CRUDTournament(Tournament)
