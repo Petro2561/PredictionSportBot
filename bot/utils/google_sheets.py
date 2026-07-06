@@ -82,6 +82,11 @@ PLAYOFF_ROUND_LABELS = {
 }
 # Стадия 2 — с 1/8 финала (1/16 не синхронизируется ботом)
 STAGE2_MAX_ROUND_MATCHES = 8
+# Стадия 1: туры 1–4 (групповой этап + 1/16)
+STAGE1_MAX_TOUR_NUMBER = 4
+# Стадия 1/2 — какое по счёту распределение по группам (1 = первое в БД по id)
+STAGE1_GROUP_DRAW_NUMBER = 2
+STAGE2_GROUP_DRAW_NUMBER = 3
 
 
 @dataclass
@@ -702,28 +707,24 @@ async def build_stage1_sheet_rows(
         for tour_matches in matches_by_tour.values():
             sort_tour_matches(tour_matches)
 
-        # только групповой этап (split_matches_by_groups); плей-офф — на «Стадия 2»
+        # Стадия 1: туры 1–4 (включая 1/16)
         tours = [
             t
             for t in tours
             if matches_by_tour.get(t.id)
-            and bool(getattr(t, "split_matches_by_groups", True))
+            and (t.number or 0) <= STAGE1_MAX_TOUR_NUMBER
         ]
         if not tours:
             return [["Матчи тура ещё не установлены"]], [], None
 
-        group_history = await crud_group_history.get_last_group_history(
-            tournament.id, session
+        group_history = await crud_group_history.get_group_history_by_draw_number(
+            tournament.id, STAGE1_GROUP_DRAW_NUMBER, session
         )
         extras_by_player = await _load_tournament_extras_by_player(
             session, tournament.id
         )
 
-        player_map = {
-            player.id: player
-            for player in tournament.players
-            if not player.is_eliminated
-        }
+        player_map = {player.id: player for player in tournament.players}
 
         if group_history:
             group_players = _sorted_group_players(
@@ -863,8 +864,8 @@ async def build_stage2_sheet_rows(
         if not playoff_tours:
             return [["Стадия 2 начнётся с 1/8 финала"]], []
 
-        group_history = await crud_group_history.get_last_group_history(
-            tournament.id, session
+        group_history = await crud_group_history.get_group_history_by_draw_number(
+            tournament.id, STAGE2_GROUP_DRAW_NUMBER, session
         )
 
         player_map = {
@@ -1494,6 +1495,10 @@ def _update_spreadsheet_sync(
 
 def _sync_existing_spreadsheet(
     spreadsheet_id: str,
+    stage1_name: str,
+    rows1: list[list],
+    layouts1: list[Stage1Layout] | None,
+    summary: SummaryLayout | None,
     stage2_name: str,
     rows2: list[list],
     layouts2: list[Stage1Layout],
@@ -1501,7 +1506,12 @@ def _sync_existing_spreadsheet(
     credentials = _get_credentials()
     sheets_service = build("sheets", "v4", credentials=credentials, cache_discovery=False)
     spreadsheet_id = _parse_spreadsheet_id(spreadsheet_id)
+    _ensure_sheet_exists(sheets_service, spreadsheet_id, stage1_name)
     _ensure_sheet_exists(sheets_service, spreadsheet_id, stage2_name)
+    sheet1 = _resolve_sheet_title(sheets_service, spreadsheet_id, stage1_name)
+    _write_sheet_rows(
+        sheets_service, spreadsheet_id, sheet1, rows1, layouts1, summary
+    )
     _write_sheet_rows(
         sheets_service,
         spreadsheet_id,
@@ -1519,6 +1529,9 @@ async def sync_google_spreadsheet(
     if include_predictions is None:
         include_predictions = await should_include_predictions(tournament)
     config = load_config()
+    rows1, layouts1, summary = await build_stage1_sheet_rows(
+        tournament, include_predictions=include_predictions
+    )
     rows2, layouts2 = await build_stage2_sheet_rows(
         tournament, include_predictions=include_predictions
     )
@@ -1526,6 +1539,10 @@ async def sync_google_spreadsheet(
         return await asyncio.to_thread(
             _sync_existing_spreadsheet,
             config.google.spreadsheet_id,
+            config.google.spreadsheet_sheet_name,
+            rows1,
+            layouts1,
+            summary,
             config.google.spreadsheet_stage2_sheet_name,
             rows2,
             layouts2,

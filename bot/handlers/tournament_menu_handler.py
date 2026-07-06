@@ -476,10 +476,10 @@ async def admin_update_sheet(callback_query: CallbackQuery, state: FSMContext):
 
     tournament = await get_tournament(tournament.id)
     if tour_has_started(tournament):
-        details = "Лист «Стадия 2» обновлён (матчи и прогнозы)."
+        details = "Таблицы обновлены: «Стадия 1» (2-е распределение) и «Стадия 2» (3-е распределение)."
     else:
         details = (
-            "Лист «Стадия 2» обновлён. "
+            "Таблицы обновлены: «Стадия 1» и «Стадия 2». "
             "Прогнозы появятся после начала тура."
         )
 
