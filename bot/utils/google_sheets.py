@@ -167,6 +167,24 @@ def _set_cell(row: list, col: int, value) -> None:
     row[col - 1] = value
 
 
+def _write_prediction_scores(
+    row: list,
+    pred_score_cols: tuple[int, int],
+    prediction: dict | None,
+    *,
+    include_predictions: bool,
+) -> None:
+    if not include_predictions:
+        return
+    if prediction is None:
+        s1, s2 = 0, 0
+    else:
+        s1 = 0 if prediction["s1"] is None else prediction["s1"]
+        s2 = 0 if prediction["s2"] is None else prediction["s2"]
+    _set_cell(row, pred_score_cols[0], s1)
+    _set_cell(row, pred_score_cols[1], s2)
+
+
 def _match_label(match: Match) -> str:
     return f"{match.first_team} – {match.second_team}"
 
@@ -477,9 +495,9 @@ def _build_stage2_round_section(
 
                 if include_predictions:
                     prediction = predictions_by_player.get(player.id, {}).get(match.id)
-                    if prediction:
-                        _set_cell(row, pred_score_cols[0], prediction["s1"])
-                        _set_cell(row, pred_score_cols[1], prediction["s2"])
+                    _write_prediction_scores(
+                        row, pred_score_cols, prediction, include_predictions=True
+                    )
 
                 _set_cell(
                     row,
@@ -633,9 +651,9 @@ def _build_standings_and_predictions(
 
                 if include_predictions:
                     prediction = predictions_by_player.get(player.id, {}).get(match.id)
-                    if prediction:
-                        _set_cell(row, pred_score_cols[0], prediction["s1"])
-                        _set_cell(row, pred_score_cols[1], prediction["s2"])
+                    _write_prediction_scores(
+                        row, pred_score_cols, prediction, include_predictions=True
+                    )
 
                 _set_cell(
                     row,
