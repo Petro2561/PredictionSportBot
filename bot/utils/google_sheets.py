@@ -14,8 +14,10 @@ from bot.utils.google_oauth import get_oauth_credentials, oauth_is_configured
 from bot.utils.common import get_tour
 from bot.utils.match_groups import (
     MATCHES_PER_HALF,
-    player_predicts_first_half,
+    group_number_from_name,
+    player_group_numbers_from_distribution,
     sort_tour_matches,
+    tour_matches_for_player_in_tour,
 )
 from bot.utils.utils_match import tour_has_started, tour_starts_at
 from bot.utils.utils_tournament import get_tournament
@@ -268,15 +270,19 @@ def _player_tour_matches(
     tour_matches: list[Match],
     total_groups: int,
     split: bool,
+    *,
+    player_group_numbers: dict[int, int] | None = None,
 ) -> list[Match]:
-    """Матчи конкретного тура, которые прогнозирует игрок (с учётом группы)."""
-    if not split:
-        return tour_matches
-    if not player.group:
-        return []
-    if player_predicts_first_half(player, total_groups):
-        return tour_matches[:MATCHES_PER_HALF]
-    return tour_matches[MATCHES_PER_HALF : MATCHES_PER_HALF * 2]
+    """Матчи тура для игрока с учётом половины (группы 1–2 / 3–4)."""
+    if player_group_numbers is not None:
+        group_number = player_group_numbers.get(player.id)
+    else:
+        group_number = (
+            group_number_from_name(player.group) if player.group else None
+        )
+    return tour_matches_for_player_in_tour(
+        tour_matches, group_number, total_groups, split=split
+    )
 
 
 def _build_summary_section(
@@ -552,6 +558,7 @@ def _build_standings_and_predictions(
     split_matches: bool = True,
     matches_per_player: int = MATCHES_PER_HALF,
     max_players: int = 0,
+    player_group_numbers: dict[int, int] | None = None,
 ) -> tuple[dict[int, list], Stage1Layout]:
     rows: dict[int, list] = {}
     num_groups = len(group_players) or 1
@@ -587,7 +594,11 @@ def _build_standings_and_predictions(
     def matches_for(player: Player) -> list[Match]:
         if player.id not in player_matches_cache:
             player_matches_cache[player.id] = _player_tour_matches(
-                player, matches, total_groups, split_matches
+                player,
+                matches,
+                total_groups,
+                split_matches,
+                player_group_numbers=player_group_numbers,
             )
         return player_matches_cache[player.id]
 
@@ -749,6 +760,9 @@ async def build_stage1_sheet_rows(
                 group_history.group_distribution, player_map
             )
             total_groups = len(group_history.group_distribution)
+            player_group_numbers = player_group_numbers_from_distribution(
+                group_history.group_distribution
+            )
         else:
             players = sorted(
                 player_map.values(),
@@ -756,6 +770,7 @@ async def build_stage1_sheet_rows(
             )
             group_players = [players] if players else []
             total_groups = 1
+            player_group_numbers = {}
 
         num_groups = max(len(group_players), 2)
         max_players = max((len(players) for players in group_players), default=0)
@@ -850,6 +865,7 @@ async def build_stage1_sheet_rows(
                 ),
                 matches_per_player=tour_matches_per_player[index],
                 max_players=max_players,
+                player_group_numbers=player_group_numbers,
             )
             rows_map.update(standings_rows)
             layouts.append(layout)

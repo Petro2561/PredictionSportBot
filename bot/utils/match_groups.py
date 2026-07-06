@@ -33,10 +33,50 @@ def splits_matches_by_groups(tournament: Tournament) -> bool:
 def get_group_number(player: Player) -> Optional[int]:
     if not player.group:
         return None
+    return group_number_from_name(player.group)
+
+
+def group_number_from_name(group_name: str) -> Optional[int]:
     try:
-        return int(player.group.rsplit(" ", 1)[-1])
+        return int(group_name.rsplit(" ", 1)[-1])
     except ValueError:
         return None
+
+
+def player_group_numbers_from_distribution(
+    group_distribution: dict[str, list[int]],
+) -> dict[int, int]:
+    """player_id → номер группы (1, 2, …) для конкретной жеребьёвки."""
+    result: dict[int, int] = {}
+    for group_name, player_ids in group_distribution.items():
+        group_num = group_number_from_name(group_name)
+        if group_num is None:
+            continue
+        for player_id in player_ids:
+            result[player_id] = group_num
+    return result
+
+
+def player_predicts_first_half_for_group(
+    group_number: int, total_groups: int
+) -> bool:
+    return group_number <= total_groups / 2
+
+
+def tour_matches_for_player_in_tour(
+    tour_matches: list[Match],
+    group_number: int | None,
+    total_groups: int,
+    *,
+    split: bool,
+) -> list[Match]:
+    if not split:
+        return tour_matches
+    if group_number is None:
+        return []
+    if player_predicts_first_half_for_group(group_number, total_groups):
+        return tour_matches[:MATCHES_PER_HALF]
+    return tour_matches[MATCHES_PER_HALF : MATCHES_PER_HALF * 2]
 
 
 def get_half_boundary(match_count: int) -> int:
