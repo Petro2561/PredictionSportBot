@@ -31,11 +31,7 @@ const CONFIG = {
       FROZEN_TOURS: [],
       blockType: 'tour',
     },
-    {
-      name: 'Стадия 2',
-      FROZEN_TOURS: [],
-      blockType: 'playoff',
-    },
+    // «Стадия 2» больше не обновляется автоматически.
   ],
 };
 

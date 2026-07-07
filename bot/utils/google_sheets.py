@@ -113,6 +113,16 @@ class SummaryLayout:
     first_player_row: int
 
 
+@dataclass
+class Stage2SummaryLayout:
+    width: int
+    num_groups: int
+    max_players: int
+    label_row: int
+    header_row: int
+    first_player_row: int
+
+
 def _num_blocks_from_width(width: int) -> int:
     return (width - FIRST_GROUP_COL + 2) // GROUP_BLOCK_WIDTH
 
@@ -404,6 +414,44 @@ def _build_stage2_schedule_section(
     rows[SCHEDULE_HEADER_ROW] = header
 
     return rows, coords, schedule_end
+
+
+def _build_stage2_summary_section(
+    group_players: list[list[Player]],
+    exact_counts: dict[int, int],
+    width: int,
+    max_players: int,
+    summary: "Stage2SummaryLayout",
+) -> dict[int, list]:
+    """Сводная таблица «Стадии 2»: очки (Итого) и число точных результатов."""
+    rows: dict[int, list] = {}
+
+    label_row = _pad_row([], width)
+    _set_cell(label_row, 1, SUMMARY_LABEL)
+    rows[summary.label_row] = label_row
+
+    header = _pad_row([], width)
+    for group_index in range(len(group_players)):
+        start = _group_start_col(group_index)
+        _set_cell(header, start, _group_header_label(group_index))
+        _set_cell(header, start + 1, "Итого")
+        _set_cell(header, start + 2, "Точные")
+    rows[summary.header_row] = header
+
+    for player_index in range(max_players):
+        row_num = summary.first_player_row + player_index
+        row = _pad_row([], width)
+        for group_index, players in enumerate(group_players):
+            if player_index >= len(players):
+                continue
+            player = players[player_index]
+            start = _group_start_col(group_index)
+            _set_cell(row, start, player.user.name or "")
+            _set_cell(row, start + 1, player.points or 0)
+            _set_cell(row, start + 2, exact_counts.get(player.id, 0))
+        rows[row_num] = row
+
+    return rows
 
 
 def _build_stage2_round_section(
@@ -943,7 +991,25 @@ async def build_stage2_sheet_rows(
         )
         rows_map.update(schedule_rows)
 
-        running_base = schedule_end + SECTION_GAP
+        # Сводная таблица: Итого + число точных результатов (по всем турам из БД)
+        if max_players and group_players:
+            exact_counts = await _load_exact_counts_by_player(session, tournament.id)
+            summary_layout = Stage2SummaryLayout(
+                width=width,
+                num_groups=num_groups,
+                max_players=max_players,
+                label_row=schedule_end + SECTION_GAP + 1,
+                header_row=schedule_end + SECTION_GAP + 2,
+                first_player_row=schedule_end + SECTION_GAP + 3,
+            )
+            rows_map.update(
+                _build_stage2_summary_section(
+                    group_players, exact_counts, width, max_players, summary_layout
+                )
+            )
+            running_base = summary_layout.first_player_row + max_players - 1 + SECTION_GAP
+        else:
+            running_base = schedule_end + SECTION_GAP
         current_number = current_tour.number or 1 if current_tour else 1
 
         for tour in playoff_tours:
@@ -1009,6 +1075,27 @@ async def _load_match_predictions_by_player(
             "points": prediction.points,
         }
     return by_player
+
+
+async def _load_exact_counts_by_player(
+    session, tournament_id: int
+) -> dict[int, int]:
+    """player_id → число точно угаданных результатов по всем турам турнира."""
+    result = await session.execute(
+        select(MatchPrediction)
+        .join(Match, MatchPrediction.match_id == Match.id)
+        .where(
+            Match.tournament_id == tournament_id,
+            Match.first_team_score.is_not(None),
+            Match.second_team_score.is_not(None),
+            MatchPrediction.first_team_score == Match.first_team_score,
+            MatchPrediction.second_team_score == Match.second_team_score,
+        )
+    )
+    counts: dict[int, int] = {}
+    for prediction in result.scalars():
+        counts[prediction.player_id] = counts.get(prediction.player_id, 0) + 1
+    return counts
 
 
 def _sorted_group_players(
@@ -1540,12 +1627,8 @@ def _sync_existing_spreadsheet(
     credentials = _get_credentials()
     sheets_service = build("sheets", "v4", credentials=credentials, cache_discovery=False)
     spreadsheet_id = _parse_spreadsheet_id(spreadsheet_id)
-    _ensure_sheet_exists(sheets_service, spreadsheet_id, stage1_name)
+    # «Стадия 1» больше не обновляется кнопкой бота (её обновляет Apps Script).
     _ensure_sheet_exists(sheets_service, spreadsheet_id, stage2_name)
-    sheet1 = _resolve_sheet_title(sheets_service, spreadsheet_id, stage1_name)
-    _write_sheet_rows(
-        sheets_service, spreadsheet_id, sheet1, rows1, layouts1, summary
-    )
     _write_sheet_rows(
         sheets_service,
         spreadsheet_id,
@@ -1563,20 +1646,18 @@ async def sync_google_spreadsheet(
     if include_predictions is None:
         include_predictions = await should_include_predictions(tournament)
     config = load_config()
-    rows1, layouts1, summary = await build_stage1_sheet_rows(
-        tournament, include_predictions=include_predictions
-    )
-    rows2, layouts2 = await build_stage2_sheet_rows(
-        tournament, include_predictions=include_predictions
-    )
     if config.google.spreadsheet_id:
+        # Кнопка бота обновляет только «Стадию 2» (см. _sync_existing_spreadsheet).
+        rows2, layouts2 = await build_stage2_sheet_rows(
+            tournament, include_predictions=include_predictions
+        )
         return await asyncio.to_thread(
             _sync_existing_spreadsheet,
             config.google.spreadsheet_id,
             config.google.spreadsheet_sheet_name,
-            rows1,
-            layouts1,
-            summary,
+            [],
+            None,
+            None,
             config.google.spreadsheet_stage2_sheet_name,
             rows2,
             layouts2,
