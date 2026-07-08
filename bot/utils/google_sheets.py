@@ -121,6 +121,8 @@ class Stage2SummaryLayout:
     label_row: int
     header_row: int
     first_player_row: int
+    show_striker: bool = False
+    show_assistant: bool = False
 
 
 def _num_blocks_from_width(width: int) -> int:
@@ -419,11 +421,13 @@ def _build_stage2_schedule_section(
 def _build_stage2_summary_section(
     group_players: list[list[Player]],
     exact_counts: dict[int, int],
+    extras_by_player: dict[int, tuple[str, str]],
+    tournament: Tournament,
     width: int,
     max_players: int,
-    summary: "Stage2SummaryLayout",
+    summary: Stage2SummaryLayout,
 ) -> dict[int, list]:
-    """Сводная таблица «Стадии 2»: очки (Итого) и число точных результатов."""
+    """Сводная таблица «Стадии 2»: очки, точные результаты, бомбардир, ассистент."""
     rows: dict[int, list] = {}
 
     label_row = _pad_row([], width)
@@ -436,6 +440,10 @@ def _build_stage2_summary_section(
         _set_cell(header, start, _group_header_label(group_index))
         _set_cell(header, start + 1, "Итого")
         _set_cell(header, start + 2, "Точные")
+        if tournament.best_striker:
+            _set_cell(header, start + 3, "Бомбардир")
+        if tournament.best_assistant:
+            _set_cell(header, start + 4, "Ассистент")
     rows[summary.header_row] = header
 
     for player_index in range(max_players):
@@ -446,9 +454,14 @@ def _build_stage2_summary_section(
                 continue
             player = players[player_index]
             start = _group_start_col(group_index)
+            striker, assistant = extras_by_player.get(player.id, ("", ""))
             _set_cell(row, start, player.user.name or "")
             _set_cell(row, start + 1, player.points or 0)
             _set_cell(row, start + 2, exact_counts.get(player.id, 0))
+            if tournament.best_striker:
+                _set_cell(row, start + 3, striker)
+            if tournament.best_assistant:
+                _set_cell(row, start + 4, assistant)
         rows[row_num] = row
 
     return rows
@@ -923,7 +936,7 @@ async def build_stage1_sheet_rows(
 
 async def build_stage2_sheet_rows(
     tournament: Tournament, *, include_predictions: bool
-) -> tuple[list[list], list[Stage1Layout]]:
+) -> tuple[list[list], list[Stage1Layout], Stage2SummaryLayout | None]:
     """Лист «Стадия 2»: плей-офф с 1/8 финала (1/4, 1/2, финал) — как в Qatar 2022."""
     async for session in get_async_session():
         tournament = await crud_tournament.get_tournament(tournament.id, session)
@@ -944,7 +957,11 @@ async def build_stage2_sheet_rows(
             and _is_stage2_playoff_tour(t, matches_by_tour[t.id])
         ]
         if not playoff_tours:
-            return [["Стадия 2 начнётся с 1/8 финала"]], []
+            return [["Стадия 2 начнётся с 1/8 финала"]], [], None
+
+        extras_by_player = await _load_tournament_extras_by_player(
+            session, tournament.id
+        )
 
         group_history = await crud_group_history.get_group_history_by_draw_number(
             tournament.id, STAGE2_GROUP_DRAW_NUMBER, session
@@ -985,6 +1002,7 @@ async def build_stage2_sheet_rows(
 
         rows_map: dict[int, list] = {}
         layouts: list[Stage1Layout] = []
+        summary_layout: Stage2SummaryLayout | None = None
 
         schedule_rows, schedule_coords, schedule_end = _build_stage2_schedule_section(
             rounds_matches, width
@@ -1001,10 +1019,18 @@ async def build_stage2_sheet_rows(
                 label_row=schedule_end + SECTION_GAP + 1,
                 header_row=schedule_end + SECTION_GAP + 2,
                 first_player_row=schedule_end + SECTION_GAP + 3,
+                show_striker=bool(tournament.best_striker),
+                show_assistant=bool(tournament.best_assistant),
             )
             rows_map.update(
                 _build_stage2_summary_section(
-                    group_players, exact_counts, width, max_players, summary_layout
+                    group_players,
+                    exact_counts,
+                    extras_by_player,
+                    tournament,
+                    width,
+                    max_players,
+                    summary_layout,
                 )
             )
             running_base = summary_layout.first_player_row + max_players - 1 + SECTION_GAP
@@ -1039,7 +1065,7 @@ async def build_stage2_sheet_rows(
             layouts.append(layout)
             running_base += _tour_block_height(max_players, len(tour_matches))
 
-        return _rows_dict_to_list(rows_map, width), layouts
+        return _rows_dict_to_list(rows_map, width), layouts, summary_layout
 
 
 async def _load_tournament_extras_by_player(
@@ -1441,8 +1467,124 @@ def _summary_format_requests(sheet_id: int, summary: SummaryLayout) -> list[dict
     return requests
 
 
+def _stage2_summary_format_requests(
+    sheet_id: int, summary: Stage2SummaryLayout
+) -> list[dict]:
+    requests: list[dict] = [
+        {
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": summary.label_row - 1,
+                    "endRowIndex": summary.label_row,
+                    "startColumnIndex": 0,
+                    "endColumnIndex": summary.width,
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "backgroundColor": YELLOW,
+                        "textFormat": {"bold": True, "fontSize": 12},
+                    }
+                },
+                "fields": "userEnteredFormat(backgroundColor,textFormat)",
+            }
+        },
+        {
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": summary.header_row - 1,
+                    "endRowIndex": summary.header_row,
+                    "startColumnIndex": _group_start_col(0) - 1,
+                    "endColumnIndex": summary.width,
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "horizontalAlignment": "CENTER",
+                        "textFormat": {"bold": True, "fontSize": 12},
+                    }
+                },
+                "fields": "userEnteredFormat(horizontalAlignment,textFormat)",
+            }
+        },
+    ]
+
+    if summary.max_players:
+        last_player_row = summary.first_player_row + summary.max_players - 1
+        for group_index in range(summary.num_groups):
+            start = _group_start_col(group_index)
+            # имя игрока
+            requests.append(
+                {
+                    "repeatCell": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "startRowIndex": summary.first_player_row - 1,
+                            "endRowIndex": last_player_row,
+                            "startColumnIndex": start - 1,
+                            "endColumnIndex": start,
+                        },
+                        "cell": {
+                            "userEnteredFormat": {
+                                "textFormat": {"fontSize": 11},
+                            }
+                        },
+                        "fields": "userEnteredFormat.textFormat",
+                    }
+                }
+            )
+            # «Итого» — жирным
+            total_col_index = start
+            requests.append(
+                {
+                    "repeatCell": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "startRowIndex": summary.first_player_row - 1,
+                            "endRowIndex": last_player_row,
+                            "startColumnIndex": total_col_index,
+                            "endColumnIndex": total_col_index + 1,
+                        },
+                        "cell": {
+                            "userEnteredFormat": {
+                                "horizontalAlignment": "CENTER",
+                                "textFormat": {"bold": True, "fontSize": 11},
+                            }
+                        },
+                        "fields": "userEnteredFormat(horizontalAlignment,textFormat)",
+                    }
+                }
+            )
+            # «Точные» — по центру
+            exact_col_index = start + 1
+            requests.append(
+                {
+                    "repeatCell": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "startRowIndex": summary.first_player_row - 1,
+                            "endRowIndex": last_player_row,
+                            "startColumnIndex": exact_col_index,
+                            "endColumnIndex": exact_col_index + 1,
+                        },
+                        "cell": {
+                            "userEnteredFormat": {
+                                "horizontalAlignment": "CENTER",
+                                "textFormat": {"fontSize": 11},
+                            }
+                        },
+                        "fields": "userEnteredFormat(horizontalAlignment,textFormat)",
+                    }
+                }
+            )
+
+    return requests
+
+
 def _stage2_formatting_requests(
-    sheet_id: int, layouts: list[Stage1Layout]
+    sheet_id: int,
+    layouts: list[Stage1Layout],
+    summary: Stage2SummaryLayout | None = None,
 ) -> list[dict]:
     if not layouts:
         return []
@@ -1450,6 +1592,8 @@ def _stage2_formatting_requests(
     requests.extend(
         _schedule_format_requests(sheet_id, layouts[0].width, len(layouts))
     )
+    if summary:
+        requests.extend(_stage2_summary_format_requests(sheet_id, summary))
     for layout in layouts:
         requests.extend(_tour_format_requests(sheet_id, layout))
     return requests
@@ -1482,6 +1626,7 @@ def _write_sheet_rows(
     summary: SummaryLayout | None = None,
     *,
     stage2_layouts: list[Stage1Layout] | None = None,
+    stage2_summary: Stage2SummaryLayout | None = None,
 ) -> None:
     sheet_id = _get_sheet_id(sheets_service, spreadsheet_id, sheet_title)
 
@@ -1516,7 +1661,9 @@ def _write_sheet_rows(
     if layouts:
         requests.extend(_formatting_requests(sheet_id, layouts, summary))
     elif stage2_layouts:
-        requests.extend(_stage2_formatting_requests(sheet_id, stage2_layouts))
+        requests.extend(
+            _stage2_formatting_requests(sheet_id, stage2_layouts, stage2_summary)
+        )
     sheets_service.spreadsheets().batchUpdate(
         spreadsheetId=spreadsheet_id,
         body={"requests": requests},
@@ -1623,6 +1770,7 @@ def _sync_existing_spreadsheet(
     stage2_name: str,
     rows2: list[list],
     layouts2: list[Stage1Layout],
+    summary2: Stage2SummaryLayout | None = None,
 ) -> str:
     credentials = _get_credentials()
     sheets_service = build("sheets", "v4", credentials=credentials, cache_discovery=False)
@@ -1636,6 +1784,7 @@ def _sync_existing_spreadsheet(
         rows2,
         None,
         stage2_layouts=layouts2,
+        stage2_summary=summary2,
     )
     return _spreadsheet_url(spreadsheet_id)
 
@@ -1648,7 +1797,7 @@ async def sync_google_spreadsheet(
     config = load_config()
     if config.google.spreadsheet_id:
         # Кнопка бота обновляет только «Стадию 2» (см. _sync_existing_spreadsheet).
-        rows2, layouts2 = await build_stage2_sheet_rows(
+        rows2, layouts2, summary2 = await build_stage2_sheet_rows(
             tournament, include_predictions=include_predictions
         )
         return await asyncio.to_thread(
@@ -1661,6 +1810,7 @@ async def sync_google_spreadsheet(
             config.google.spreadsheet_stage2_sheet_name,
             rows2,
             layouts2,
+            summary2,
         )
 
     rows, layouts, summary = await build_stage1_sheet_rows(
