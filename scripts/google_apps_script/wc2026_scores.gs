@@ -12,14 +12,14 @@
  * но групповые матчи (туры 1–3) уже есть в этой странице.
  *
  * Раскладка листов (как в боте), строка 2 — заголовки блоков:
- *   Стадия 1: «Тур 1», «Тур 2», …
- *   Стадия 2: «1/8 финала», «1/4 финала», …
+ *   Стадия 1: «Тур 1», «Тур 2», … (расписание; прогнозы ниже не трогаем)
+ *   Стадия 2: «1/8 финала», «1/4 финала», … (только расписание вверху)
  */
 
 const CONFIG = {
   SCHEDULE_HEADER_ROW: 2,
   FIRST_MATCH_ROW: 3,
-  MAX_SCAN_ROWS: 40,
+  MAX_SCAN_ROWS: 48,
   STOP_AFTER_BLANK_ROWS: 2,
   MAX_BLOCK_COLS: 60,
   // Групповой этап + плей-офф (см. calendar/#group в браузере — тот же источник)
@@ -27,11 +27,14 @@ const CONFIG = {
   SHEETS: [
     {
       name: 'Стадия 1',
-      // Туры 1–3 — групповой этап; тур 4 — 1/16 (в HTML тоже есть)
       FROZEN_TOURS: [],
       blockType: 'tour',
     },
-    // «Стадия 2» больше не обновляется автоматически.
+    {
+      name: 'Стадия 2',
+      FROZEN_TOURS: [],
+      blockType: 'playoff',
+    },
   ],
 };
 
@@ -58,6 +61,10 @@ const TEAM_ALIASES = {
 const PINNED_SCORES = {
   'бельгия|сенегал': { home: 2, away: 2 },
   'аргентина|кабоверде': { home: 1, away: 1 },
+  // пенальти: на листе — счёт основного времени
+  'германия|парагвай': { home: 1, away: 1 },
+  'нидерланды|марокко': { home: 1, away: 1 },
+  'австралия|египет': { home: 1, away: 1 },
 };
 
 function installTrigger() {
@@ -343,8 +350,9 @@ function parseDateText_(rowBody) {
 function parseScoreText_(text) {
   if (!text) return null;
   const cleaned = text.replace(/\u2013|\u2014|–|—/g, '-').trim();
-  if (/^[-–—\s:]+$/.test(cleaned)) return null;
+  if (/^[-–—\s:]+$/.test(cleaned) || cleaned.indexOf(':') < 0) return null;
 
+  // «1 : 1 3 : 4» (пенальти) или «3 : 2 ДВ» — берём первый счёт (основное время)
   const m = cleaned.match(/(\d+)\s*:\s*(\d+)/);
   if (!m) return null;
   return { home: parseInt(m[1], 10), away: parseInt(m[2], 10) };
@@ -406,7 +414,7 @@ function updateRow_(sheet, row, labelCol, dateCol, score1Col, score2Col, scoreMa
 }
 
 function parseMatchLabel_(label) {
-  const parts = label.split(/\s+[–—-]\s+/);
+  const parts = label.split(/\s*[–—-]\s*/);
   if (parts.length !== 2) return null;
   return [normalizeTeam_(parts[0]), normalizeTeam_(parts[1])];
 }

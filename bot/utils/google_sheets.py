@@ -42,7 +42,7 @@ SCOPES = (
 )
 
 FIRST_GROUP_COL = 2
-GROUP_BLOCK_WIDTH = 7
+GROUP_BLOCK_WIDTH = 8
 
 # Верхняя секция — расписание всех туров по горизонтали (Тур 1, Тур 2, …)
 SCHEDULE_BLANK_ROW = 1
@@ -61,7 +61,7 @@ PLAYER_BLOCK_GAP = 2
 GROUP_HEADER_SUFFIXES = ("А", "B", "C", "D", "E", "F", "G", "H")
 
 COL_A_WIDTH = 13.63
-BLOCK_COL_WIDTHS = (26.38, 3.63, 13.0, 13.0, 4.5, 3.63, 14.38)
+BLOCK_COL_WIDTHS = (26.38, 3.63, 13.0, 13.0, 4.5, 3.63, 14.38, 3.0)
 
 YELLOW = {"red": 1.0, "green": 0.851, "blue": 0.4}
 WHITE = {"red": 1.0, "green": 1.0, "blue": 1.0}
@@ -245,7 +245,6 @@ def _points_formula(
     schedule_row: int,
     pred_score_cols: tuple[int, int],
     schedule_score_cols: tuple[int, int],
-    diff_col: int,
     *,
     exact_points: int = 3,
     diff_points: int = 2,
@@ -253,13 +252,12 @@ def _points_formula(
 ) -> str:
     pc1, pc2 = (_column_letter(c) for c in pred_score_cols)
     sc1, sc2 = (_column_letter(c) for c in schedule_score_cols)
-    pe = _column_letter(diff_col)
     s = FORMULA_SEP
     return (
         f"=IF(ISBLANK(${sc1}${schedule_row}){s}\"\"{s}"
         f"IF(AND({pc1}{pred_row}=${sc1}${schedule_row}{s}{pc2}{pred_row}=${sc2}${schedule_row}){s}{exact_points}{s}"
         f"IF({pc1}{pred_row}-{pc2}{pred_row}=${sc1}${schedule_row}-${sc2}${schedule_row}{s}{diff_points}{s}"
-        f"IF({pe}{pred_row}>0{s}{outcome_points}{s}0))))"
+        f"IF(({pc1}{pred_row}-{pc2}{pred_row})*({sc1}{schedule_row}-${sc2}${schedule_row})>0{s}{outcome_points}{s}0))))"
     )
 
 
@@ -596,24 +594,12 @@ def _build_stage2_round_section(
 
                 _set_cell(
                     row,
-                    diff_col,
-                    _diff_formula(
-                        pred_row_num,
-                        schedule_row,
-                        pred_score_cols,
-                        schedule_score_cols,
-                        diff_col,
-                    ),
-                )
-                _set_cell(
-                    row,
                     points_col,
                     _points_formula(
                         pred_row_num,
                         schedule_row,
                         pred_score_cols,
                         schedule_score_cols,
-                        diff_col,
                         exact_points=exact_points,
                         diff_points=diff_points,
                         outcome_points=outcome_points,
@@ -757,24 +743,12 @@ def _build_standings_and_predictions(
 
                 _set_cell(
                     row,
-                    diff_col,
-                    _diff_formula(
-                        pred_row_num,
-                        schedule_row,
-                        pred_score_cols,
-                        schedule_score_cols,
-                        diff_col,
-                    ),
-                )
-                _set_cell(
-                    row,
                     points_col,
                     _points_formula(
                         pred_row_num,
                         schedule_row,
                         pred_score_cols,
                         schedule_score_cols,
-                        diff_col,
                         exact_points=exact_points,
                         diff_points=diff_points,
                         outcome_points=outcome_points,
@@ -1562,27 +1536,9 @@ def _stage2_summary_format_requests(
         last_player_row = summary.first_player_row + summary.max_players - 1
         for group_index in range(summary.num_groups):
             start = _group_start_col(group_index)
-            requests.append(
-                {
-                    "repeatCell": {
-                        "range": {
-                            "sheetId": sheet_id,
-                            "startRowIndex": summary.first_player_row - 1,
-                            "endRowIndex": last_player_row,
-                            "startColumnIndex": start - 1,
-                            "endColumnIndex": start,
-                        },
-                        "cell": {
-                            "userEnteredFormat": {
-                                "textFormat": {"fontSize": 11},
-                            }
-                        },
-                        "fields": "userEnteredFormat.textFormat",
-                    }
-                }
-            )
-            # «Итого» — жирным
-            total_col_index = start + summary.num_rounds
+
+            # «Итого» — жирным/по центру
+            total_col_index = start + 1 + summary.num_rounds
             requests.append(
                 {
                     "repeatCell": {
@@ -1596,15 +1552,16 @@ def _stage2_summary_format_requests(
                         "cell": {
                             "userEnteredFormat": {
                                 "horizontalAlignment": "CENTER",
-                                "textFormat": {"bold": True, "fontSize": 11},
+                                "textFormat": {"bold": True},
                             }
                         },
                         "fields": "userEnteredFormat(horizontalAlignment,textFormat)",
                     }
                 }
             )
+
             # «Точные» — по центру
-            exact_col_index = start + summary.num_rounds + 1
+            exact_col_index = start + 2 + summary.num_rounds
             requests.append(
                 {
                     "repeatCell": {
@@ -1618,13 +1575,13 @@ def _stage2_summary_format_requests(
                         "cell": {
                             "userEnteredFormat": {
                                 "horizontalAlignment": "CENTER",
-                                "textFormat": {"fontSize": 11},
                             }
                         },
-                        "fields": "userEnteredFormat(horizontalAlignment,textFormat)",
+                        "fields": "userEnteredFormat(horizontalAlignment)",
                     }
                 }
             )
+
             # раунды плей-офф — по центру
             if summary.num_rounds:
                 requests.append(
@@ -1634,16 +1591,15 @@ def _stage2_summary_format_requests(
                                 "sheetId": sheet_id,
                                 "startRowIndex": summary.first_player_row - 1,
                                 "endRowIndex": last_player_row,
-                                "startColumnIndex": start,
-                                "endColumnIndex": start + summary.num_rounds,
+                                "startColumnIndex": start + 1,
+                                "endColumnIndex": start + 1 + summary.num_rounds,
                             },
                             "cell": {
                                 "userEnteredFormat": {
                                     "horizontalAlignment": "CENTER",
-                                    "textFormat": {"fontSize": 11},
                                 }
                             },
-                            "fields": "userEnteredFormat(horizontalAlignment,textFormat)",
+                            "fields": "userEnteredFormat(horizontalAlignment)",
                         }
                     }
                 )
