@@ -121,6 +121,8 @@ class Stage2SummaryLayout:
     label_row: int
     header_row: int
     first_player_row: int
+    num_rounds: int = 0
+    round_labels: list[str] | None = None
     show_striker: bool = False
     show_assistant: bool = False
 
@@ -423,12 +425,15 @@ def _build_stage2_summary_section(
     exact_counts: dict[int, int],
     extras_by_player: dict[int, tuple[str, str]],
     tournament: Tournament,
+    round_bases: list[int],
+    round_labels: list[str],
     width: int,
     max_players: int,
     summary: Stage2SummaryLayout,
 ) -> dict[int, list]:
-    """Сводная таблица «Стадии 2»: очки, точные результаты, бомбардир, ассистент."""
+    """Сводная таблица «Стадии 2»: очки по раундам, итого, точные, бомбардир, ассистент."""
     rows: dict[int, list] = {}
+    num_rounds = len(round_bases)
 
     label_row = _pad_row([], width)
     _set_cell(label_row, 1, SUMMARY_LABEL)
@@ -438,12 +443,17 @@ def _build_stage2_summary_section(
     for group_index in range(len(group_players)):
         start = _group_start_col(group_index)
         _set_cell(header, start, _group_header_label(group_index))
-        _set_cell(header, start + 1, "Итого")
-        _set_cell(header, start + 2, "Точные")
+        for round_index, round_label in enumerate(round_labels):
+            _set_cell(header, start + 1 + round_index, round_label)
+        total_col = start + 1 + num_rounds
+        _set_cell(header, total_col, "Итого")
+        _set_cell(header, total_col + 1, "Точные")
+        extra_col = total_col + 2
         if tournament.best_striker:
-            _set_cell(header, start + 3, "Бомбардир")
+            _set_cell(header, extra_col, "Бомбардир")
+            extra_col += 1
         if tournament.best_assistant:
-            _set_cell(header, start + 4, "Ассистент")
+            _set_cell(header, extra_col, "Ассистент")
     rows[summary.header_row] = header
 
     for player_index in range(max_players):
@@ -455,13 +465,31 @@ def _build_stage2_summary_section(
             player = players[player_index]
             start = _group_start_col(group_index)
             striker, assistant = extras_by_player.get(player.id, ("", ""))
+            round_sum_col = _column_letter(start + 1)
             _set_cell(row, start, player.user.name or "")
-            _set_cell(row, start + 1, player.points or 0)
-            _set_cell(row, start + 2, exact_counts.get(player.id, 0))
+            for round_index, base in enumerate(round_bases):
+                ref_row = base + TOUR_STANDINGS_ROW + player_index
+                _set_cell(
+                    row, start + 1 + round_index, f"={round_sum_col}{ref_row}"
+                )
+            total_col = start + 1 + num_rounds
+            if num_rounds:
+                first_col = _column_letter(start + 1)
+                last_col = _column_letter(start + num_rounds)
+                _set_cell(
+                    row,
+                    total_col,
+                    f"=SUM({first_col}{row_num}:{last_col}{row_num})",
+                )
+            else:
+                _set_cell(row, total_col, player.points or 0)
+            _set_cell(row, total_col + 1, exact_counts.get(player.id, 0))
+            extra_col = total_col + 2
             if tournament.best_striker:
-                _set_cell(row, start + 3, striker)
+                _set_cell(row, extra_col, striker)
+                extra_col += 1
             if tournament.best_assistant:
-                _set_cell(row, start + 4, assistant)
+                _set_cell(row, extra_col, assistant)
         rows[row_num] = row
 
     return rows
@@ -1009,7 +1037,27 @@ async def build_stage2_sheet_rows(
         )
         rows_map.update(schedule_rows)
 
-        # Сводная таблица: Итого + число точных результатов (по всем турам из БД)
+        round_labels = [
+            _playoff_round_label(len(matches_by_tour[tour.id]), tour.number or 0)
+            for tour in playoff_tours
+        ]
+        round_heights = [
+            _tour_block_height(max_players, len(matches_by_tour[tour.id]))
+            for tour in playoff_tours
+        ]
+
+        if max_players and group_players:
+            summary_end_row = schedule_end + SECTION_GAP + 2 + max_players
+            first_round_base = summary_end_row + SECTION_GAP
+        else:
+            first_round_base = schedule_end + SECTION_GAP
+
+        round_bases: list[int] = []
+        running_base = first_round_base
+        for height in round_heights:
+            round_bases.append(running_base)
+            running_base += height
+
         if max_players and group_players:
             exact_counts = await _load_exact_counts_by_player(session, tournament.id)
             summary_layout = Stage2SummaryLayout(
@@ -1019,6 +1067,8 @@ async def build_stage2_sheet_rows(
                 label_row=schedule_end + SECTION_GAP + 1,
                 header_row=schedule_end + SECTION_GAP + 2,
                 first_player_row=schedule_end + SECTION_GAP + 3,
+                num_rounds=len(round_bases),
+                round_labels=round_labels,
                 show_striker=bool(tournament.best_striker),
                 show_assistant=bool(tournament.best_assistant),
             )
@@ -1028,19 +1078,19 @@ async def build_stage2_sheet_rows(
                     exact_counts,
                     extras_by_player,
                     tournament,
+                    round_bases,
+                    round_labels,
                     width,
                     max_players,
                     summary_layout,
                 )
             )
-            running_base = summary_layout.first_player_row + max_players - 1 + SECTION_GAP
-        else:
-            running_base = schedule_end + SECTION_GAP
         current_number = current_tour.number or 1 if current_tour else 1
 
-        for tour in playoff_tours:
+        for index, tour in enumerate(playoff_tours):
             tour_matches = matches_by_tour[tour.id]
-            round_label = _playoff_round_label(len(tour_matches), tour.number or 0)
+            round_label = round_labels[index]
+            base = round_bases[index]
             predictions_by_player = await _load_match_predictions_by_player(
                 session, tournament.id, tour.id
             )
@@ -1058,12 +1108,11 @@ async def build_stage2_sheet_rows(
                 predictions_by_player,
                 width,
                 include_for_round,
-                base=running_base,
+                base=base,
                 max_players=max_players,
             )
             rows_map.update(round_rows)
             layouts.append(layout)
-            running_base += _tour_block_height(max_players, len(tour_matches))
 
         return _rows_dict_to_list(rows_map, width), layouts, summary_layout
 
@@ -1513,7 +1562,6 @@ def _stage2_summary_format_requests(
         last_player_row = summary.first_player_row + summary.max_players - 1
         for group_index in range(summary.num_groups):
             start = _group_start_col(group_index)
-            # имя игрока
             requests.append(
                 {
                     "repeatCell": {
@@ -1534,7 +1582,7 @@ def _stage2_summary_format_requests(
                 }
             )
             # «Итого» — жирным
-            total_col_index = start
+            total_col_index = start + summary.num_rounds
             requests.append(
                 {
                     "repeatCell": {
@@ -1556,7 +1604,7 @@ def _stage2_summary_format_requests(
                 }
             )
             # «Точные» — по центру
-            exact_col_index = start + 1
+            exact_col_index = start + summary.num_rounds + 1
             requests.append(
                 {
                     "repeatCell": {
@@ -1577,6 +1625,28 @@ def _stage2_summary_format_requests(
                     }
                 }
             )
+            # раунды плей-офф — по центру
+            if summary.num_rounds:
+                requests.append(
+                    {
+                        "repeatCell": {
+                            "range": {
+                                "sheetId": sheet_id,
+                                "startRowIndex": summary.first_player_row - 1,
+                                "endRowIndex": last_player_row,
+                                "startColumnIndex": start,
+                                "endColumnIndex": start + summary.num_rounds,
+                            },
+                            "cell": {
+                                "userEnteredFormat": {
+                                    "horizontalAlignment": "CENTER",
+                                    "textFormat": {"fontSize": 11},
+                                }
+                            },
+                            "fields": "userEnteredFormat(horizontalAlignment,textFormat)",
+                        }
+                    }
+                )
 
     return requests
 
