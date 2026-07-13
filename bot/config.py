@@ -22,6 +22,7 @@ class GoogleSheets:
     spreadsheet_id: str | None
     spreadsheet_sheet_name: str
     spreadsheet_stage2_sheet_name: str
+    spreadsheet_stage3_sheet_name: str
     share_email: str | None
     skip_deadline_check: bool
     client_id: str | None
@@ -66,6 +67,9 @@ def load_config(path: str | None = None) -> Config:
             spreadsheet_sheet_name=env("GOOGLE_SPREADSHEET_SHEET_NAME", "Стадия 1"),
             spreadsheet_stage2_sheet_name=env(
                 "GOOGLE_SPREADSHEET_STAGE2_SHEET_NAME", "Стадия 2"
+            ),
+            spreadsheet_stage3_sheet_name=env(
+                "GOOGLE_SPREADSHEET_STAGE3_SHEET_NAME", "Стадия 3"
             ),
             share_email=env("GOOGLE_SHEETS_SHARE_EMAIL", None),
             skip_deadline_check=env.bool("GOOGLE_SHEETS_SKIP_DEADLINE", False),

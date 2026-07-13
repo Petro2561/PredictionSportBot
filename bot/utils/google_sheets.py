@@ -82,13 +82,18 @@ PLAYOFF_ROUND_LABELS = {
     2: "1/2 финала",
     1: "Финал",
 }
-# Стадия 2 — с 1/8 финала (1/16 не синхронизируется ботом)
+# Стадия 2 — 1/8 и 1/4 финала
+STAGE2_MIN_ROUND_MATCHES = 4
 STAGE2_MAX_ROUND_MATCHES = 8
+# Стадия 3 — 1/2 финала и финал
+STAGE3_MIN_ROUND_MATCHES = 1
+STAGE3_MAX_ROUND_MATCHES = 2
 # Стадия 1: туры 1–4 (групповой этап + 1/16)
 STAGE1_MAX_TOUR_NUMBER = 4
-# Стадия 1/2 — какое по счёту распределение по группам (1 = первое в БД по id)
+# Стадия 1/2/3 — какое по счёту распределение по группам (1 = первое в БД по id)
 STAGE1_GROUP_DRAW_NUMBER = 2
 STAGE2_GROUP_DRAW_NUMBER = 3
+STAGE3_GROUP_DRAW_NUMBER = 3
 
 
 @dataclass
@@ -219,8 +224,21 @@ def _is_playoff_tour(tour: Tour) -> bool:
 
 
 def _is_stage2_playoff_tour(tour: Tour, tour_matches: list[Match]) -> bool:
-    """Плей-офф для листа «Стадия 2»: с 1/8 финала (без 1/16)."""
-    return _is_playoff_tour(tour) and len(tour_matches) <= STAGE2_MAX_ROUND_MATCHES
+    """Плей-офф для листа «Стадия 2»: 1/8 и 1/4 финала."""
+    n = len(tour_matches)
+    return (
+        _is_playoff_tour(tour)
+        and STAGE2_MIN_ROUND_MATCHES <= n <= STAGE2_MAX_ROUND_MATCHES
+    )
+
+
+def _is_stage3_playoff_tour(tour: Tour, tour_matches: list[Match]) -> bool:
+    """Плей-офф для листа «Стадия 3»: 1/2 финала и финал."""
+    n = len(tour_matches)
+    return (
+        _is_playoff_tour(tour)
+        and STAGE3_MIN_ROUND_MATCHES <= n <= STAGE3_MAX_ROUND_MATCHES
+    )
 
 
 def _column_letter(index: int) -> str:
@@ -939,7 +957,37 @@ async def build_stage1_sheet_rows(
 async def build_stage2_sheet_rows(
     tournament: Tournament, *, include_predictions: bool
 ) -> tuple[list[list], list[Stage1Layout], Stage2SummaryLayout | None]:
-    """Лист «Стадия 2»: плей-офф с 1/8 финала (1/4, 1/2, финал) — как в Qatar 2022."""
+    """Лист «Стадия 2»: 1/8 и 1/4 финала."""
+    return await _build_playoff_stage_sheet_rows(
+        tournament,
+        include_predictions=include_predictions,
+        tour_filter=_is_stage2_playoff_tour,
+        group_draw_number=STAGE2_GROUP_DRAW_NUMBER,
+        empty_message="Стадия 2 начнётся с 1/8 финала",
+    )
+
+
+async def build_stage3_sheet_rows(
+    tournament: Tournament, *, include_predictions: bool
+) -> tuple[list[list], list[Stage1Layout], Stage2SummaryLayout | None]:
+    """Лист «Стадия 3»: 1/2 финала и финал."""
+    return await _build_playoff_stage_sheet_rows(
+        tournament,
+        include_predictions=include_predictions,
+        tour_filter=_is_stage3_playoff_tour,
+        group_draw_number=STAGE3_GROUP_DRAW_NUMBER,
+        empty_message="Стадия 3 начнётся с 1/2 финала",
+    )
+
+
+async def _build_playoff_stage_sheet_rows(
+    tournament: Tournament,
+    *,
+    include_predictions: bool,
+    tour_filter,
+    group_draw_number: int,
+    empty_message: str,
+) -> tuple[list[list], list[Stage1Layout], Stage2SummaryLayout | None]:
     async for session in get_async_session():
         tournament = await crud_tournament.get_tournament(tournament.id, session)
         current_tour = tournament.current_tour
@@ -956,17 +1004,17 @@ async def build_stage2_sheet_rows(
             t
             for t in tours
             if matches_by_tour.get(t.id)
-            and _is_stage2_playoff_tour(t, matches_by_tour[t.id])
+            and tour_filter(t, matches_by_tour[t.id])
         ]
         if not playoff_tours:
-            return [["Стадия 2 начнётся с 1/8 финала"]], [], None
+            return [[empty_message]], [], None
 
         extras_by_player = await _load_tournament_extras_by_player(
             session, tournament.id
         )
 
         group_history = await crud_group_history.get_group_history_by_draw_number(
-            tournament.id, STAGE2_GROUP_DRAW_NUMBER, session
+            tournament.id, group_draw_number, session
         )
 
         player_map = {
@@ -1797,6 +1845,10 @@ def _sync_existing_spreadsheet(
     rows2: list[list],
     layouts2: list[Stage1Layout],
     summary2: Stage2SummaryLayout | None = None,
+    stage3_name: str | None = None,
+    rows3: list[list] | None = None,
+    layouts3: list[Stage1Layout] | None = None,
+    summary3: Stage2SummaryLayout | None = None,
 ) -> str:
     credentials = _get_credentials()
     sheets_service = build("sheets", "v4", credentials=credentials, cache_discovery=False)
@@ -1812,6 +1864,17 @@ def _sync_existing_spreadsheet(
         stage2_layouts=layouts2,
         stage2_summary=summary2,
     )
+    if stage3_name and rows3 is not None and layouts3 is not None:
+        _ensure_sheet_exists(sheets_service, spreadsheet_id, stage3_name)
+        _write_sheet_rows(
+            sheets_service,
+            spreadsheet_id,
+            stage3_name,
+            rows3,
+            None,
+            stage2_layouts=layouts3,
+            stage2_summary=summary3,
+        )
     return _spreadsheet_url(spreadsheet_id)
 
 
@@ -1822,8 +1885,11 @@ async def sync_google_spreadsheet(
         include_predictions = await should_include_predictions(tournament)
     config = load_config()
     if config.google.spreadsheet_id:
-        # Кнопка бота обновляет только «Стадию 2» (см. _sync_existing_spreadsheet).
+        # Кнопка бота обновляет «Стадию 2» и «Стадию 3» (см. _sync_existing_spreadsheet).
         rows2, layouts2, summary2 = await build_stage2_sheet_rows(
+            tournament, include_predictions=include_predictions
+        )
+        rows3, layouts3, summary3 = await build_stage3_sheet_rows(
             tournament, include_predictions=include_predictions
         )
         return await asyncio.to_thread(
@@ -1837,6 +1903,10 @@ async def sync_google_spreadsheet(
             rows2,
             layouts2,
             summary2,
+            config.google.spreadsheet_stage3_sheet_name,
+            rows3,
+            layouts3,
+            summary3,
         )
 
     rows, layouts, summary = await build_stage1_sheet_rows(
