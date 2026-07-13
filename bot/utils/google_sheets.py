@@ -1861,7 +1861,16 @@ def _sync_existing_spreadsheet(
     credentials = _get_credentials()
     sheets_service = build("sheets", "v4", credentials=credentials, cache_discovery=False)
     spreadsheet_id = _parse_spreadsheet_id(spreadsheet_id)
-    # «Стадия 1» больше не обновляется кнопкой бота (её обновляет Apps Script).
+    if rows1 and layouts1 is not None:
+        _ensure_sheet_exists(sheets_service, spreadsheet_id, stage1_name)
+        _write_sheet_rows(
+            sheets_service,
+            spreadsheet_id,
+            stage1_name,
+            rows1,
+            layouts1,
+            summary,
+        )
     _ensure_sheet_exists(sheets_service, spreadsheet_id, stage2_name)
     _write_sheet_rows(
         sheets_service,
@@ -1893,7 +1902,9 @@ async def sync_google_spreadsheet(
         include_predictions = await should_include_predictions(tournament)
     config = load_config()
     if config.google.spreadsheet_id:
-        # Кнопка бота обновляет «Стадию 2» и «Стадию 3» (см. _sync_existing_spreadsheet).
+        rows1, layouts1, summary1 = await build_stage1_sheet_rows(
+            tournament, include_predictions=include_predictions
+        )
         rows2, layouts2, summary2 = await build_stage2_sheet_rows(
             tournament, include_predictions=include_predictions
         )
@@ -1904,9 +1915,9 @@ async def sync_google_spreadsheet(
             _sync_existing_spreadsheet,
             config.google.spreadsheet_id,
             config.google.spreadsheet_sheet_name,
-            [],
-            None,
-            None,
+            rows1,
+            layouts1,
+            summary1,
             config.google.spreadsheet_stage2_sheet_name,
             rows2,
             layouts2,
