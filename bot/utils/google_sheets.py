@@ -90,10 +90,10 @@ STAGE3_MIN_ROUND_MATCHES = 1
 STAGE3_MAX_ROUND_MATCHES = 2
 # Стадия 1: туры 1–4 (групповой этап + 1/16)
 STAGE1_MAX_TOUR_NUMBER = 4
-# Стадия 1/2/3 — какое по счёту распределение по группам (1 = первое в БД по id)
+# Стадия 1/2 — какое по счёту распределение по группам (1 = первое в БД по id)
+# Стадия 3 — все не выбывшие автоматически в одной группе (без group_history)
 STAGE1_GROUP_DRAW_NUMBER = 2
 STAGE2_GROUP_DRAW_NUMBER = 3
-STAGE3_GROUP_DRAW_NUMBER = 3
 
 
 @dataclass
@@ -970,13 +970,14 @@ async def build_stage2_sheet_rows(
 async def build_stage3_sheet_rows(
     tournament: Tournament, *, include_predictions: bool
 ) -> tuple[list[list], list[Stage1Layout], Stage2SummaryLayout | None]:
-    """Лист «Стадия 3»: 1/2 финала и финал."""
+    """Лист «Стадия 3»: 1/2 финала и финал — все не выбывшие в одной группе."""
     return await _build_playoff_stage_sheet_rows(
         tournament,
         include_predictions=include_predictions,
         tour_filter=_is_stage3_playoff_tour,
-        group_draw_number=STAGE3_GROUP_DRAW_NUMBER,
+        group_draw_number=0,
         empty_message="Стадия 3 начнётся с 1/2 финала",
+        force_single_group=True,
     )
 
 
@@ -987,6 +988,7 @@ async def _build_playoff_stage_sheet_rows(
     tour_filter,
     group_draw_number: int,
     empty_message: str,
+    force_single_group: bool = False,
 ) -> tuple[list[list], list[Stage1Layout], Stage2SummaryLayout | None]:
     async for session in get_async_session():
         tournament = await crud_tournament.get_tournament(tournament.id, session)
@@ -1013,26 +1015,32 @@ async def _build_playoff_stage_sheet_rows(
             session, tournament.id
         )
 
-        group_history = await crud_group_history.get_group_history_by_draw_number(
-            tournament.id, group_draw_number, session
-        )
-
         player_map = {
             player.id: player
             for player in tournament.players
             if not player.is_eliminated
         }
 
-        if group_history:
-            group_players = _sorted_group_players(
-                group_history.group_distribution, player_map
-            )
-        else:
+        if force_single_group:
             players = sorted(
                 player_map.values(),
                 key=lambda player: (-player.points, player.user.name or ""),
             )
             group_players = [players] if players else []
+        else:
+            group_history = await crud_group_history.get_group_history_by_draw_number(
+                tournament.id, group_draw_number, session
+            )
+            if group_history:
+                group_players = _sorted_group_players(
+                    group_history.group_distribution, player_map
+                )
+            else:
+                players = sorted(
+                    player_map.values(),
+                    key=lambda player: (-player.points, player.user.name or ""),
+                )
+                group_players = [players] if players else []
 
         num_groups = max(len(group_players), 2)
         max_players = max((len(players) for players in group_players), default=0)
